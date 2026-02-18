@@ -1,13 +1,13 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Brainrot Saver HUB | v5.0 ULTIMATE",
-   LoadingTitle = "Активация мгновенной кражи...",
+   Name = "KAITO STYLE | Save Brainrot",
+   LoadingTitle = "Адаптация систем Kaito Hub...",
    LoadingSubtitle = "by pxcv9t",
    ConfigurationSaving = { Enabled = false }
 })
 
--- Переменные
+-- Переменные системы
 local player = game.Players.LocalPlayer
 local char = player.Character or player.CharacterAdded:Wait()
 local hrp = char:WaitForChild("HumanoidRootPart")
@@ -16,91 +16,86 @@ local SAVE_POS = hrp.CFrame
 _G.AutoSteal = false
 _G.TargetRarity = "God"
 
-local MainTab = Window:CreateTab("Главная", 4483362458)
+local MainTab = Window:CreateTab("MAIN", 4483362458)
 
--- Функция мгновенной активации (как у Kaito Hub)
-local function instantInteract(prompt)
-    if fireproximityprompt then
-        fireproximityprompt(prompt) -- Мгновенная кража (если поддерживает чит)
-    else
-        -- Запасной быстрый метод
-        prompt:InputHoldBegin()
-        task.wait(0.1) 
-        prompt:InputHoldEnd()
+-- Функция "Мгновенной кражи" как у Kaito
+local function kaitoCollect(obj)
+    local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+    if prompt and prompt.Enabled then
+        -- Проверка на Анти-Робукс (пропускаем, если рядом кнопки покупки за 99/129 робуксов)
+        if obj.Parent:FindFirstChild("Spawn God") or obj.Parent:FindFirstChild("Spawn Secret") then 
+            return 
+        end
+        if prompt.ActionText:find("R$") or prompt.ObjectText:find("R$") then 
+            return 
+        end
+
+        -- Сохраняем базу, если она не задана
+        if SAVE_POS.Position.Magnitude < 5 then SAVE_POS = hrp.CFrame end
+
+        -- Мгновенный перелет и активация
+        local oldPos = hrp.CFrame
+        hrp.CFrame = obj:GetModelCFrame()
+        task.wait(0.1)
+        
+        -- Используем fireproximityprompt для мгновенного результата
+        if fireproximityprompt then
+            fireproximityprompt(prompt)
+        else
+            prompt:InputHoldBegin()
+            task.wait(0.1)
+            prompt:InputHoldEnd()
+        end
+        
+        task.wait(0.1)
+        hrp.CFrame = SAVE_POS -- Возврат
     end
 end
 
--- Проверка на Робуксы
-local function isPaid(prompt)
-    if prompt.ActionText:find("R$") or prompt.ObjectText:find("R$") then return true end
-    local p = prompt.Parent
-    if p:FindFirstChild("RobuxIcon") or p:FindFirstChild("Price") or p:FindFirstChild("Spawn") then return true end
-    return false
-end
-
--- ОСНОВНОЙ ЦИКЛ (Мгновенный поиск)
-local function startSteal()
+-- Цикл сканирования
+local function startKaitoFarm()
     while _G.AutoSteal do
-        task.wait(0.3) -- Высокая скорость сканирования
+        task.wait(0.2) -- Максимальная скорость
         
-        -- Проходим по папкам игроков (как в твоем Dex)
-        for _, folder in pairs(game.Workspace:GetChildren()) do
+        -- Поиск целей по всей карте (включая папки игроков из Dex)
+        for _, v in pairs(game.Workspace:GetDescendants()) do
             if not _G.AutoSteal then break end
             
-            -- Проверяем, что это папка игрока или база
-            for _, model in pairs(folder:GetChildren()) do
-                if model:IsA("Model") then
-                    local rarity = model:GetAttribute("Secret")
-                    
-                    if rarity == _G.TargetRarity then
-                        local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
-                        
-                        if prompt and prompt.Enabled and not isPaid(prompt) then
-                            -- Сохраняем базу, если она не задана
-                            if SAVE_POS.Position.Magnitude < 10 then SAVE_POS = hrp.CFrame end
-                            
-                            -- Мгновенный полет и действие
-                            hrp.CFrame = model:GetModelCFrame() * CFrame.new(0, 3, 0)
-                            task.wait(0.1)
-                            
-                            instantInteract(prompt)
-                            
-                            task.wait(0.1)
-                            hrp.CFrame = SAVE_POS -- Мгновенно назад
-                        end
-                    end
+            if v:IsA("Model") then
+                -- Проверка редкости через атрибут или имя (как в Kaito)
+                local rarityAttr = v:GetAttribute("Secret")
+                if rarityAttr == _G.TargetRarity then
+                    kaitoCollect(v)
                 end
             end
         end
     end
 end
 
--- ИНТЕРФЕЙС
+-- Кнопки GUI
+MainTab:CreateButton({
+   Name = "Save Position (Сохранить базу)",
+   Callback = function() 
+      SAVE_POS = player.Character.HumanoidRootPart.CFrame 
+      Rayfield:Notify({Title = "System", Content = "Base Position Saved!", Duration = 2})
+   end,
+})
+
 MainTab:CreateDropdown({
-   Name = "Выбери редкость",
-   Options = {"God", "Secret"},
+   Name = "Select Rarity",
+   Options = {"Common", "Rare", "Epic", "Legendary", "Mythic", "God", "Secret"},
    CurrentOption = {"God"},
    MultipleOptions = false,
    Callback = function(Option) _G.TargetRarity = Option[1] end,
 })
 
 MainTab:CreateToggle({
-   Name = "Мгновенная Авто-кража",
+   Name = "Auto Collect Selected Rarity",
    CurrentValue = false,
    Callback = function(Value)
       _G.AutoSteal = Value
       if Value then
-         SAVE_POS = player.Character.HumanoidRootPart.CFrame
-         Rayfield:Notify({Title = "Система", Content = "Позиция сохранена. Начинаю мгновенный сбор!", Duration = 3})
-         task.spawn(startSteal)
+         task.spawn(startKaitoFarm)
       end
-   end,
-})
-
-MainTab:CreateButton({
-   Name = "Задать текущую точку как Базу",
-   Callback = function() 
-      SAVE_POS = player.Character.HumanoidRootPart.CFrame 
-      Rayfield:Notify({Title = "Успех", Content = "Точка возврата обновлена!", Duration = 2})
    end,
 })
