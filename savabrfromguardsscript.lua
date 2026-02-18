@@ -1,13 +1,13 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Brainrot Saver HUB | v4.0 FIX",
-   LoadingTitle = "Глубокое сканирование папок...",
+   Name = "Brainrot Saver HUB | v5.0 ULTIMATE",
+   LoadingTitle = "Активация мгновенной кражи...",
    LoadingSubtitle = "by pxcv9t",
    ConfigurationSaving = { Enabled = false }
 })
 
--- Настройки
+-- Переменные
 local player = game.Players.LocalPlayer
 local char = player.Character or player.CharacterAdded:Wait()
 local hrp = char:WaitForChild("HumanoidRootPart")
@@ -18,52 +18,55 @@ _G.TargetRarity = "God"
 
 local MainTab = Window:CreateTab("Главная", 4483362458)
 
--- Функция проверки на робуксы (теперь более строгая)
-local function isPaid(obj)
-    local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-    if prompt then
-        -- Если цена указана в робуксах через значок
-        if prompt.ActionText:find("R$") or prompt.ObjectText:find("R$") then return true end
+-- Функция мгновенной активации (как у Kaito Hub)
+local function instantInteract(prompt)
+    if fireproximityprompt then
+        fireproximityprompt(prompt) -- Мгновенная кража (если поддерживает чит)
+    else
+        -- Запасной быстрый метод
+        prompt:InputHoldBegin()
+        task.wait(0.1) 
+        prompt:InputHoldEnd()
     end
-    -- Если рядом есть кнопка покупки "Spawn God" за 99 робуксов (как на скрине)
-    if obj.Parent:FindFirstChild("Spawn God") or obj.Parent:FindFirstChild("Spawn Secret") then return true end
+end
+
+-- Проверка на Робуксы
+local function isPaid(prompt)
+    if prompt.ActionText:find("R$") or prompt.ObjectText:find("R$") then return true end
+    local p = prompt.Parent
+    if p:FindFirstChild("RobuxIcon") or p:FindFirstChild("Price") or p:FindFirstChild("Spawn") then return true end
     return false
 end
 
--- ОСНОВНОЙ ЦИКЛ КРАЖИ (Сканирование игроков)
+-- ОСНОВНОЙ ЦИКЛ (Мгновенный поиск)
 local function startSteal()
     while _G.AutoSteal do
-        task.wait(1)
+        task.wait(0.3) -- Высокая скорость сканирования
         
-        -- Скрипт теперь перебирает папки всех игроков в Workspace
-        for _, otherPlayerFolder in pairs(game.Workspace:GetChildren()) do
+        -- Проходим по папкам игроков (как в твоем Dex)
+        for _, folder in pairs(game.Workspace:GetChildren()) do
             if not _G.AutoSteal then break end
             
-            -- Ищем бреинротов внутри папок других игроков (как в твоем Dex)
-            for _, model in pairs(otherPlayerFolder:GetChildren()) do
+            -- Проверяем, что это папка игрока или база
+            for _, model in pairs(folder:GetChildren()) do
                 if model:IsA("Model") then
                     local rarity = model:GetAttribute("Secret")
                     
-                    -- Проверяем редкость (God или Secret)
                     if rarity == _G.TargetRarity then
                         local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
                         
-                        -- Проверяем, что это не за робуксы
-                        if prompt and prompt.Enabled and not isPaid(model) then
-                            Rayfield:Notify({Title = "Нашел!", Content = "Лечу к " .. model.Name, Duration = 2})
+                        if prompt and prompt.Enabled and not isPaid(prompt) then
+                            -- Сохраняем базу, если она не задана
+                            if SAVE_POS.Position.Magnitude < 10 then SAVE_POS = hrp.CFrame end
                             
-                            -- Твой любимый телепорт
-                            hrp.CFrame = model:GetModelCFrame() * CFrame.new(0, 5, 0)
-                            task.wait(0.3)
+                            -- Мгновенный полет и действие
+                            hrp.CFrame = model:GetModelCFrame() * CFrame.new(0, 3, 0)
+                            task.wait(0.1)
                             
-                            -- Зажим кнопки кражи
-                            prompt:InputHoldBegin()
-                            task.wait(prompt.HoldDuration + 0.3)
-                            prompt:InputHoldEnd()
+                            instantInteract(prompt)
                             
-                            -- Возврат на базу
-                            hrp.CFrame = SAVE_POS
-                            task.wait(0.5)
+                            task.wait(0.1)
+                            hrp.CFrame = SAVE_POS -- Мгновенно назад
                         end
                     end
                 end
@@ -82,18 +85,22 @@ MainTab:CreateDropdown({
 })
 
 MainTab:CreateToggle({
-   Name = "Авто-сбор",
+   Name = "Мгновенная Авто-кража",
    CurrentValue = false,
    Callback = function(Value)
       _G.AutoSteal = Value
       if Value then
          SAVE_POS = player.Character.HumanoidRootPart.CFrame
+         Rayfield:Notify({Title = "Система", Content = "Позиция сохранена. Начинаю мгновенный сбор!", Duration = 3})
          task.spawn(startSteal)
       end
    end,
 })
 
 MainTab:CreateButton({
-   Name = "Сохранить позицию базы",
-   Callback = function() SAVE_POS = player.Character.HumanoidRootPart.CFrame end,
+   Name = "Задать текущую точку как Базу",
+   Callback = function() 
+      SAVE_POS = player.Character.HumanoidRootPart.CFrame 
+      Rayfield:Notify({Title = "Успех", Content = "Точка возврата обновлена!", Duration = 2})
+   end,
 })
