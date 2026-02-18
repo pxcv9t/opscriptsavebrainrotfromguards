@@ -1,90 +1,100 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Brainrot Saver HUB",
-   LoadingTitle = "Загрузка скрипта...",
-   LoadingSubtitle = "by pxcv9t",
-   ConfigurationSaving = {
-      Enabled = true,
-      FolderName = "BrainrotSaveConfig",
-      FileName = "MainConfig"
-   }
+   Name = "Made by pxcv9t, SBFG",
+   LoadingTitle = "Loading into the game...",
+   LoadingSubtitle = "v2.1 AlphaFix",
+   ConfigurationSaving = { Enabled = false }
 })
 
 -- Переменные
-local WANTED_RARITIES = {["God"] = true, ["Secret"] = true}
-local SAVE_POS = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
+local player = game.Players.LocalPlayer
+local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+local SAVE_POS = root and root.CFrame or CFrame.new(0,0,0)
 _G.AutoSteal = false
 
 -- Вкладка
 local MainTab = Window:CreateTab("Авто-Фарм", 4483362458)
 
--- Функции логики
+-- Функция проверки на Робуксы (Anti-Robux)
 local function isPaid(prompt)
-    local parent = prompt.Parent
-    if parent:FindFirstChild("RobuxIcon") or parent:FindFirstChild("Price") then return true end
+    if not prompt then return true end
+    local p = prompt.Parent
+    -- Проверка иконок и текста цены
+    if p:FindFirstChild("RobuxIcon") or p:FindFirstChild("Price") or p:FindFirstChild("Robux") then return true end
     if prompt.ActionText:find("R$") or prompt.ObjectText:find("R$") then return true end
     return false
 end
 
+-- Основная логика кражи
 local function startSteal()
     while _G.AutoSteal do
-        task.wait(0.5)
-        local player = game.Players.LocalPlayer
-        local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-        if not root then continue end
+        task.wait(1)
+        
+        -- Свежий поиск персонажа
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then continue end
 
-        for _, obj in pairs(game.Workspace:GetDescendants()) do
+        -- Ищем модели в Workspace
+        for _, model in pairs(game.Workspace:GetDescendants()) do
             if not _G.AutoSteal then break end
             
-            if obj:IsA("Model") then
-                local rarity = obj:GetAttribute("Secret")
+            -- Проверяем, является ли это моделью бреинрота
+            if model:IsA("Model") and (model:GetAttribute("Secret") == "God" or model:GetAttribute("Secret") == "Secret") then
                 
-                if rarity and WANTED_RARITIES[rarity] then
-                    local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+                -- Ищем кнопку "Steal"
+                local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+                
+                if prompt and prompt.Enabled and not isPaid(prompt) then
+                    print("Цель найдена: " .. model.Name)
                     
-                    if prompt and prompt.Enabled and not isPaid(prompt) then
-                        -- Телепорт и кража
-                        root.CFrame = obj:GetModelCFrame() * CFrame.new(0, 3, 0)
-                        task.wait(0.3)
-                        
-                        prompt:InputHoldBegin()
-                        task.wait(prompt.HoldDuration + 0.2)
-                        prompt:InputHoldEnd()
-                        
-                        -- Возврат на позицию
-                        root.CFrame = SAVE_POS
-                        task.wait(0.5)
-                    end
+                    -- Сохраняем текущую позицию ПЕРЕД прыжком, если она еще не задана
+                    if SAVE_POS.Position.Magnitude < 1 then SAVE_POS = hrp.CFrame end
+
+                    -- 1. Летим к цели (чуть выше, чтобы не застрять в текстурах)
+                    hrp.CFrame = model:GetModelCFrame() * CFrame.new(0, 5, 0)
+                    task.wait(0.3)
+                    
+                    -- 2. Прожимаем кнопку (HoldDuration берется из настроек игры)
+                    prompt:InputHoldBegin()
+                    task.wait(prompt.HoldDuration + 0.3)
+                    prompt:InputHoldEnd()
+                    
+                    -- 3. Возвращаемся в сейв-зону
+                    hrp.CFrame = SAVE_POS
+                    task.wait(0.5)
                 end
             end
         end
     end
 end
 
--- Элементы GUI
+-- GUI элементы
 MainTab:CreateToggle({
    Name = "Авто-кража (God/Secret)",
    CurrentValue = false,
-   Flag = "AutoStealFlag",
+   Flag = "StealToggle",
    Callback = function(Value)
       _G.AutoSteal = Value
       if Value then
-         SAVE_POS = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
-         Rayfield:Notify({Title = "Старт", Content = "Позиция сохранена, фарм запущен!", Duration = 3})
+         local char = player.Character
+         if char and char:FindFirstChild("HumanoidRootPart") then
+            SAVE_POS = char.HumanoidRootPart.CFrame
+            Rayfield:Notify({Title = "Фарм", Content = "Позиция возврата сохранена!", Duration = 3})
+         end
          task.spawn(startSteal)
-      else
-         Rayfield:Notify({Title = "Стоп", Content = "Фарм остановлен", Duration = 3})
       end
    end,
 })
 
 MainTab:CreateButton({
-   Name = "Обновить точку возврата",
+   Name = "Обновить точку возврата (встань в сейв-зону!)",
    Callback = function()
-      SAVE_POS = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
-      Rayfield:Notify({Title = "Успех", Content = "Новая точка сохранения установлена!", Duration = 3})
+      local char = player.Character
+      if char and char:FindFirstChild("HumanoidRootPart") then
+         SAVE_POS = char.HumanoidRootPart.CFrame
+         Rayfield:Notify({Title = "Система", Content = "Точка обновлена успешно!", Duration = 2})
+      end
    end,
 })
-
-Rayfield:LoadConfiguration()
