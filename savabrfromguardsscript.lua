@@ -4,62 +4,40 @@ local Window = Rayfield:CreateWindow({
    Name = "KAITO HUB | Escape Guard to Save Brainrot",
    LoadingTitle = "Загрузка скрипта...",
    LoadingSubtitle = "by Gemini",
-   ConfigurationSaving = {
-      Enabled = false,
-      FolderName = nil,
-      FileName = "BrainrotHub"
-   },
-   Discord = {
-      Enabled = false,
-      Invite = "noinvitelink",
-      RememberJoins = true 
-   },
+   ConfigurationSaving = {Enabled = false},
+   Discord = {Enabled = false},
    KeySystem = false
 })
 
--- Вкладки
-local MainTab = Window:CreateTab("MAIN", 4483362458) -- Иконка домика
+local MainTab = Window:CreateTab("MAIN", 4483362458)
 local UpgradesTab = Window:CreateTab("UPGRADES", 4483362458)
 
--- Переменные для логики
 local savedPosition = nil
 local selectedRarity = "Common"
 local autoCollectEnabled = false
 local player = game.Players.LocalPlayer
 
--- Функция для поиска Брейнрота по редкости
+-- 🔥 УМНЫЙ ПОИСК БРЕЙНРОТА ПО ПАРЯЩЕМУ ТЕКСТУ 🔥
 local function getTargetBrainrot(rarity)
-    -- !!! ОБЯЗАТЕЛЬНО ИЗМЕНИТЬ ПУТЬ !!!
-    -- Укажи папку, где лежат брейнроты. Например: game.Workspace.Brainrots или game.Workspace.Map.NPCs
-    local brainrotsFolder = workspace -- Замени на нужную папку
-    
-    for _, obj in pairs(brainrotsFolder:GetChildren()) do
-        -- !!! ОБЯЗАТЕЛЬНО ИЗМЕНИТЬ ЛОГИКУ ПОИСКА !!!
-        -- Ниже пример: скрипт ищет модельку с нужным именем ИЛИ с объектом Rarity внутри.
-        -- Настрой это под структуру плейса.
-        if obj:IsA("Model") and obj:FindFirstChild("HumanoidRootPart") then
-            -- Пример 1: Если редкость указана в имени (например "God_Brainrot")
-            if string.match(obj.Name, rarity) then
-                return obj
+    -- Сканируем все модельки в Workspace
+    for _, model in pairs(workspace:GetDescendants()) do
+        if model:IsA("Model") and model:FindFirstChild("HumanoidRootPart") then
+            -- Ищем внутри модельки текстовые панели (TextLabel)
+            for _, desc in pairs(model:GetDescendants()) do
+                if desc:IsA("TextLabel") then
+                    -- Если текст точно совпадает с выбранной редкостью
+                    if desc.Text == rarity or string.match(desc.Text, rarity) then
+                        return model
+                    end
+                end
             end
-            
-            -- Пример 2: Если внутри есть StringValue под названием "Rarity"
-            -- if obj:FindFirstChild("Rarity") and obj.Rarity.Value == rarity then
-            --     return obj
-            -- end
         end
     end
     return nil
 end
 
-Rayfield:Notify({
-   Title = "Скрипт загружен!",
-   Content = "Не забудь сохранить позицию перед автофармом.",
-   Duration = 5,
-   Image = 4483362458,
-})
+Rayfield:Notify({Title = "Умный поиск активирован", Content = "Скрипт готов к работе!", Duration = 3})
 
--- === РАЗДЕЛ ТЕЛЕПОРТА (MAIN) ===
 MainTab:CreateSection("Teleport Section")
 
 MainTab:CreateButton({
@@ -68,7 +46,7 @@ MainTab:CreateButton({
         local char = player.Character
         if char and char:FindFirstChild("HumanoidRootPart") then
             savedPosition = char.HumanoidRootPart.CFrame
-            Rayfield:Notify({Title = "Position Saved", Content = "Your position has been saved!", Duration = 3})
+            Rayfield:Notify({Title = "Успешно!", Content = "Позиция сохранена.", Duration = 2})
         end
    end,
 })
@@ -85,7 +63,7 @@ MainTab:CreateButton({
 
 MainTab:CreateDropdown({
    Name = "Select Rarity",
-   Options = {"Common", "Epic", "Legendary", "Mythic", "God", "Secret"},
+   Options = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "God", "Secret"},
    CurrentOption = {"Common"},
    MultipleOptions = false,
    Flag = "RarityDropdown",
@@ -98,7 +76,7 @@ MainTab:CreateButton({
    Name = "Collect Selected Rarity (Once)",
    Callback = function()
         if not savedPosition then
-            Rayfield:Notify({Title = "Ошибка", Content = "Сначала сохрани позицию!", Duration = 3})
+            Rayfield:Notify({Title = "Ошибка", Content = "Сохрани позицию перед сбором!", Duration = 3})
             return
         end
         
@@ -106,18 +84,11 @@ MainTab:CreateButton({
         local char = player.Character
         
         if target and char and char:FindFirstChild("HumanoidRootPart") then
-            -- Прыгаем к брейнроту
             char.HumanoidRootPart.CFrame = target.HumanoidRootPart.CFrame
-            task.wait(0.2) -- Ждем, чтобы игра засчитала касание (Touch)
-            
-            -- Если для сбора нужно нажать кнопку "E" (ProximityPrompt), раскомментируй строку ниже:
-            -- fireproximityprompt(target.ProximityPrompt)
-            -- task.wait(0.2)
-            
-            -- Возвращаемся на базу
+            task.wait(0.2) -- Ждем, чтобы игра засчитала касание
             char.HumanoidRootPart.CFrame = savedPosition
         else
-            Rayfield:Notify({Title = "Не найдено", Content = "Брейнрот с редкостью " .. selectedRarity .. " не найден.", Duration = 2})
+            Rayfield:Notify({Title = "Не найдено", Content = "Брейнрот [" .. selectedRarity .. "] сейчас нет на карте!", Duration = 2})
         end
    end,
 })
@@ -131,29 +102,25 @@ MainTab:CreateToggle({
    end,
 })
 
--- === ЛОГИКА АВТОФАРМА ===
+-- Цикл Автофарма
 task.spawn(function()
-    while task.wait(0.5) do -- Скорость цикла (0.5 сек). Если кикает античит - увеличь до 1-2.
+    while task.wait(0.8) do -- Задержка 0.8 сек (чтобы не лагало от поиска)
         if autoCollectEnabled and savedPosition then
             local target = getTargetBrainrot(selectedRarity)
             local char = player.Character
             
             if target and char and char:FindFirstChild("HumanoidRootPart") then
                 char.HumanoidRootPart.CFrame = target.HumanoidRootPart.CFrame
-                task.wait(0.3) -- Пауза на сбор
-                
-                -- fireproximityprompt(target.ProximityPrompt) -- Убрать коммент, если там кнопка
-                
+                task.wait(0.3) -- Пауза в клетке для сбора
                 char.HumanoidRootPart.CFrame = savedPosition
-                task.wait(1.5) -- Пауза перед следующим сбором, чтобы не забанило
+                task.wait(1) -- Пауза на базе, чтобы античит не ругался
             end
         end
     end
 end)
 
--- === РАЗДЕЛ АПГРЕЙДОВ (UPGRADES) ===
-UpgradesTab:CreateSection("Speed, Rebirth & Money")
-
-UpgradesTab:CreateToggle({Name = "Auto Buy Speed +5", CurrentValue = false, Callback = function(Value) end})
-UpgradesTab:CreateToggle({Name = "Auto Rebirth", CurrentValue = false, Callback = function(Value) end})
-UpgradesTab:CreateToggle({Name = "Auto Collect Money", CurrentValue = false, Callback = function(Value) end})
+-- Пустышки для апгрейдов на будущее
+UpgradesTab:CreateSection("Функционал в разработке")
+UpgradesTab:CreateToggle({Name = "Auto Buy Speed +5", CurrentValue = false, Callback = function() end})
+UpgradesTab:CreateToggle({Name = "Auto Rebirth", CurrentValue = false, Callback = function() end})
+UpgradesTab:CreateToggle({Name = "Auto Collect Money", CurrentValue = false, Callback = function() end})
