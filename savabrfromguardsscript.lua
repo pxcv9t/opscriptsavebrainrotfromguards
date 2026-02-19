@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Norm hub | Escape Guard to Save Brainrot",
+   Name = "Norm Hub | Escape Guard to Save Brainrot",
    LoadingTitle = "Загрузка скрипта...",
-   LoadingSubtitle = "by pxcv9t",
+   LoadingSubtitle = "by Pxcv9t",
    ConfigurationSaving = {Enabled = false},
    Discord = {Enabled = false},
    KeySystem = false
@@ -17,26 +17,43 @@ local selectedRarity = "Common"
 local autoCollectEnabled = false
 local player = game.Players.LocalPlayer
 
--- 🔥 УМНЫЙ ПОИСК (Ищет только диких в клетках с кнопкой) 🔥
+-- 🔥 СУПЕР-УМНЫЙ ПОИСК (Ищет кнопку клетки рядом с мобом) 🔥
 local function getTargetBrainrot(rarity)
-    for _, model in pairs(workspace:GetDescendants()) do
-        if model:IsA("Model") and model:FindFirstChild("HumanoidRootPart") then
-            local isCorrectRarity = false
+    for _, desc in pairs(workspace:GetDescendants()) do
+        -- Ищем текст редкости (например, "God")
+        if desc:IsA("TextLabel") and (desc.Text == rarity or string.match(desc.Text, rarity)) then
+            local model = desc:FindFirstAncestorOfClass("Model")
             
-            -- Проверяем редкость по тексту
-            for _, desc in pairs(model:GetDescendants()) do
-                if desc:IsA("TextLabel") and (desc.Text == rarity or string.match(desc.Text, rarity)) then
-                    isCorrectRarity = true
-                    break
+            if model and model:FindFirstChild("HumanoidRootPart") then
+                local hrp = model.HumanoidRootPart
+                local closestPrompt = nil
+                local minDistance = 25 -- Радиус поиска кнопки (в стадах)
+                
+                -- Ищем все кнопки (ProximityPrompt) на карте
+                for _, prompt in pairs(workspace:GetDescendants()) do
+                    if prompt:IsA("ProximityPrompt") then
+                        local pos = nil
+                        -- Узнаем, где физически находится кнопка
+                        if prompt.Parent:IsA("BasePart") then 
+                            pos = prompt.Parent.Position
+                        elseif prompt.Parent:IsA("Attachment") then 
+                            pos = prompt.Parent.WorldPosition 
+                        end
+                        
+                        -- Если кнопка близко к нашему брейнроту, берем её!
+                        if pos then
+                            local dist = (pos - hrp.Position).Magnitude
+                            if dist < minDistance then
+                                closestPrompt = prompt
+                                minDistance = dist
+                            end
+                        end
+                    end
                 end
-            end
-
-            if isCorrectRarity then
-                -- САМОЕ ВАЖНОЕ: Ищем кнопку ProximityPrompt внутри
-                -- Если кнопки нет (это пет в Safe Zone) - игнорируем!
-                local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
-                if prompt then
-                    return model, prompt -- Возвращаем и модельку, и саму кнопку
+                
+                -- Если нашли кнопку рядом с этим брейнротом, значит он в клетке! Возвращаем.
+                if closestPrompt then
+                    return model, closestPrompt
                 end
             end
         end
@@ -44,7 +61,7 @@ local function getTargetBrainrot(rarity)
     return nil, nil
 end
 
-Rayfield:Notify({Title = "Обновление", Content = "Добавлен авто-взлом клеток и игнор Safe Zone!", Duration = 3})
+Rayfield:Notify({Title = "Исправления применены", Content = "Теперь перс замораживается при взломе!", Duration = 3})
 
 MainTab:CreateSection("Teleport Section")
 
@@ -80,37 +97,55 @@ MainTab:CreateDropdown({
    end,
 })
 
+-- Функция для кражи (чтобы не писать дважды один и тот же код)
+local function performSteal()
+    if not savedPosition then
+        Rayfield:Notify({Title = "Ошибка", Content = "Сохрани позицию перед сбором!", Duration = 3})
+        return false
+    end
+    
+    local target, prompt = getTargetBrainrot(selectedRarity)
+    local char = player.Character
+    
+    if target and prompt and char and char:FindFirstChild("HumanoidRootPart") then
+        local hrp = char.HumanoidRootPart
+        
+        -- 1. Телепортируемся к самой кнопке (клетке), а не внутрь моба
+        local promptPart = prompt.Parent
+        if promptPart and promptPart:IsA("BasePart") then
+            hrp.CFrame = promptPart.CFrame + Vector3.new(0, 2, 0)
+        else
+            hrp.CFrame = target.HumanoidRootPart.CFrame
+        end
+        
+        -- 2. ЗАМОРАЖИВАЕМ персонажа, чтобы зажатие не сбилось
+        hrp.Anchored = true
+        task.wait(0.5) -- Ждем долю секунды, чтобы игра прогрузила зону
+        
+        -- 3. Зажимаем кнопку
+        fireproximityprompt(prompt)
+        
+        -- Ждем, пока заполнится полоска + небольшой запас
+        if prompt.HoldDuration > 0 then
+            task.wait(prompt.HoldDuration + 0.3)
+        else
+            task.wait(0.5)
+        end
+        
+        -- 4. Размораживаем и возвращаем на базу
+        hrp.Anchored = false
+        hrp.CFrame = savedPosition
+        return true
+    else
+        Rayfield:Notify({Title = "Не найдено", Content = "Дикий Брейнрот [" .. selectedRarity .. "] в клетке не найден!", Duration = 2})
+        return false
+    end
+end
+
 MainTab:CreateButton({
    Name = "Collect Selected Rarity (Once)",
    Callback = function()
-        if not savedPosition then
-            Rayfield:Notify({Title = "Ошибка", Content = "Сохрани позицию перед сбором!", Duration = 3})
-            return
-        end
-        
-        local target, prompt = getTargetBrainrot(selectedRarity)
-        local char = player.Character
-        
-        if target and prompt and char and char:FindFirstChild("HumanoidRootPart") then
-            -- 1. Телепортируемся
-            char.HumanoidRootPart.CFrame = target.HumanoidRootPart.CFrame
-            task.wait(0.3) -- Ждем прогрузки
-            
-            -- 2. Автоматически "зажимаем" кнопку
-            fireproximityprompt(prompt)
-            
-            -- Ждем, пока заполнится полоска (HoldDuration - это время зажатия в игре)
-            if prompt.HoldDuration > 0 then
-                task.wait(prompt.HoldDuration + 0.2)
-            else
-                task.wait(0.5)
-            end
-            
-            -- 3. Возвращаемся на базу
-            char.HumanoidRootPart.CFrame = savedPosition
-        else
-            Rayfield:Notify({Title = "Не найдено", Content = "Дикий Брейнрот [" .. selectedRarity .. "] в клетке не найден!", Duration = 2})
-        end
+        performSteal()
    end,
 })
 
@@ -125,29 +160,11 @@ MainTab:CreateToggle({
 
 -- ⚙️ ЦИКЛ АВТОФАРМА ⚙️
 task.spawn(function()
-    while task.wait(1) do -- Проверяем карту каждую секунду
+    while task.wait(1.5) do -- Проверяем каждые 1.5 секунды
         if autoCollectEnabled and savedPosition then
-            local target, prompt = getTargetBrainrot(selectedRarity)
-            local char = player.Character
-            
-            if target and prompt and char and char:FindFirstChild("HumanoidRootPart") then
-                -- Телепорт
-                char.HumanoidRootPart.CFrame = target.HumanoidRootPart.CFrame
-                task.wait(0.3) 
-                
-                -- Зажимаем кнопку
-                fireproximityprompt(prompt)
-                
-                -- Ждем таймер взлома
-                if prompt.HoldDuration > 0 then
-                    task.wait(prompt.HoldDuration + 0.2)
-                else
-                    task.wait(0.5)
-                end
-                
-                -- Возврат
-                char.HumanoidRootPart.CFrame = savedPosition
-                task.wait(1) -- Пауза на базе, чтобы не крашнуло
+            local success = performSteal()
+            if success then
+                task.wait(1) -- Доп. пауза на базе, чтобы античит не ругался
             end
         end
     end
