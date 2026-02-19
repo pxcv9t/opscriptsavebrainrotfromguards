@@ -1,11 +1,10 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Norm Hub | Escape Guard to Save Brainrot",
-   LoadingTitle = "Загрузка скрипта...",
-   LoadingSubtitle = "by Pxcv9t",
+   Name = "KAITO HUB | Anti-Robux Edition",
+   LoadingTitle = "Загрузка системы защиты...",
+   LoadingSubtitle = "by Gemini",
    ConfigurationSaving = {Enabled = false},
-   Discord = {Enabled = false},
    KeySystem = false
 })
 
@@ -13,47 +12,52 @@ local MainTab = Window:CreateTab("MAIN", 4483362458)
 local UpgradesTab = Window:CreateTab("UPGRADES", 4483362458)
 
 local savedPosition = nil
-local selectedRarity = "Common"
+local selectedRarity = "God"
 local autoCollectEnabled = false
 local player = game.Players.LocalPlayer
 
--- 🔥 СУПЕР-УМНЫЙ ПОИСК (Ищет кнопку клетки рядом с мобом) 🔥
+-- Функция проверки на Робуксы и запретные зоны
+local function isSafeToCollect(model, prompt)
+    -- 1. Проверка на платные элементы (Anti-Robux)
+    for _, item in pairs(model:GetDescendants()) do
+        if item:IsA("TextLabel") or item:IsA("TextBox") then
+            local txt = item.Text:lower()
+            if string.match(txt, "rbx") or string.match(txt, "robux") or string.match(txt, "r%$") or string.match(txt, "buy") then
+                return false -- Это донатная клетка
+            end
+        end
+    end
+
+    -- 2. Проверка на нахождение в Easy/Normal базах
+    local path = model:GetFullName():lower()
+    if string.match(path, "easy") or string.match(path, "normal") then
+        return false -- Пропускаем начальные базы
+    end
+
+    -- 3. Проверка на Safe Zone (если объект принадлежит игроку)
+    if model:FindFirstAncestor("SafeZone") or model:FindFirstAncestor(player.Name) then
+        return false 
+    end
+
+    return true
+end
+
 local function getTargetBrainrot(rarity)
     for _, desc in pairs(workspace:GetDescendants()) do
-        -- Ищем текст редкости (например, "God")
         if desc:IsA("TextLabel") and (desc.Text == rarity or string.match(desc.Text, rarity)) then
             local model = desc:FindFirstAncestorOfClass("Model")
-            
-            if model and model:FindFirstChild("HumanoidRootPart") then
-                local hrp = model.HumanoidRootPart
-                local closestPrompt = nil
-                local minDistance = 25 -- Радиус поиска кнопки (в стадах)
-                
-                -- Ищем все кнопки (ProximityPrompt) на карте
-                for _, prompt in pairs(workspace:GetDescendants()) do
-                    if prompt:IsA("ProximityPrompt") then
-                        local pos = nil
-                        -- Узнаем, где физически находится кнопка
-                        if prompt.Parent:IsA("BasePart") then 
-                            pos = prompt.Parent.Position
-                        elseif prompt.Parent:IsA("Attachment") then 
-                            pos = prompt.Parent.WorldPosition 
-                        end
-                        
-                        -- Если кнопка близко к нашему брейнроту, берем её!
-                        if pos then
-                            local dist = (pos - hrp.Position).Magnitude
-                            if dist < minDistance then
-                                closestPrompt = prompt
-                                minDistance = dist
+            if model then
+                -- Ищем кнопку "Steal" (украсть) в радиусе 15 единиц
+                for _, p in pairs(workspace:GetDescendants()) do
+                    if p:IsA("ProximityPrompt") and p.ActionText == "Steal" then
+                        local pPos = (p.Parent:IsA("BasePart") and p.Parent.Position) or (p.Parent:IsA("Attachment") and p.Parent.WorldPosition)
+                        if pPos and (pPos - desc.Parent.WorldPosition).Magnitude < 15 then
+                            -- Проверяем на донат и зоны
+                            if isSafeToCollect(model, p) then
+                                return model, p
                             end
                         end
                     end
-                end
-                
-                -- Если нашли кнопку рядом с этим брейнротом, значит он в клетке! Возвращаем.
-                if closestPrompt then
-                    return model, closestPrompt
                 end
             end
         end
@@ -61,27 +65,12 @@ local function getTargetBrainrot(rarity)
     return nil, nil
 end
 
-Rayfield:Notify({Title = "Исправления применены", Content = "Теперь перс замораживается при взломе!", Duration = 3})
-
-MainTab:CreateSection("Teleport Section")
-
 MainTab:CreateButton({
-   Name = "Save Position",
+   Name = "Save Home Position",
    Callback = function()
-        local char = player.Character
-        if char and char:FindFirstChild("HumanoidRootPart") then
-            savedPosition = char.HumanoidRootPart.CFrame
-            Rayfield:Notify({Title = "Успешно!", Content = "Позиция сохранена.", Duration = 2})
-        end
-   end,
-})
-
-MainTab:CreateButton({
-   Name = "Return to Saved Position",
-   Callback = function()
-        local char = player.Character
-        if char and char:FindFirstChild("HumanoidRootPart") and savedPosition then
-            char.HumanoidRootPart.CFrame = savedPosition
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            savedPosition = player.Character.HumanoidRootPart.CFrame
+            Rayfield:Notify({Title = "ОК", Content = "Позиция базы сохранена!", Duration = 2})
         end
    end,
 })
@@ -90,85 +79,49 @@ MainTab:CreateDropdown({
    Name = "Select Rarity",
    Options = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "God", "Secret"},
    CurrentOption = {"God"},
-   MultipleOptions = false,
-   Flag = "RarityDropdown",
-   Callback = function(Option)
-        selectedRarity = Option[1]
-   end,
+   Callback = function(Option) selectedRarity = Option[1] end,
 })
 
--- Функция для кражи (чтобы не писать дважды один и тот же код)
-local function performSteal()
-    if not savedPosition then
-        Rayfield:Notify({Title = "Ошибка", Content = "Сохрани позицию перед сбором!", Duration = 3})
-        return false
+local function startSteal()
+    if not savedPosition then 
+        Rayfield:Notify({Title = "Внимание", Content = "Сначала нажми Save Home Position!", Duration = 3})
+        return 
     end
     
     local target, prompt = getTargetBrainrot(selectedRarity)
     local char = player.Character
-    
     if target and prompt and char and char:FindFirstChild("HumanoidRootPart") then
         local hrp = char.HumanoidRootPart
         
-        -- 1. Телепортируемся к самой кнопке (клетке), а не внутрь моба
-        local promptPart = prompt.Parent
-        if promptPart and promptPart:IsA("BasePart") then
-            hrp.CFrame = promptPart.CFrame + Vector3.new(0, 2, 0)
-        else
-            hrp.CFrame = target.HumanoidRootPart.CFrame
-        end
+        -- Летим к кнопке
+        hrp.CFrame = (prompt.Parent:IsA("BasePart") and prompt.Parent.CFrame) or target.HumanoidRootPart.CFrame
+        task.wait(0.2)
+        hrp.Anchored = true -- Замораживаем для стабильности
         
-        -- 2. ЗАМОРАЖИВАЕМ персонажа, чтобы зажатие не сбилось
-        hrp.Anchored = true
-        task.wait(0.5) -- Ждем долю секунды, чтобы игра прогрузила зону
-        
-        -- 3. Зажимаем кнопку
         fireproximityprompt(prompt)
+        task.wait(prompt.HoldDuration + 0.3)
         
-        -- Ждем, пока заполнится полоска + небольшой запас
-        if prompt.HoldDuration > 0 then
-            task.wait(prompt.HoldDuration + 0.3)
-        else
-            task.wait(0.5)
-        end
-        
-        -- 4. Размораживаем и возвращаем на базу
         hrp.Anchored = false
         hrp.CFrame = savedPosition
-        return true
-    else
-        Rayfield:Notify({Title = "Не найдено", Content = "Дикий Брейнрот [" .. selectedRarity .. "] в клетке не найден!", Duration = 2})
-        return false
     end
 end
 
-MainTab:CreateButton({
-   Name = "Collect Selected Rarity (Once)",
-   Callback = function()
-        performSteal()
-   end,
-})
-
 MainTab:CreateToggle({
-   Name = "Auto Collect Selected Rarity",
+   Name = "Start Auto-Farming (Beyond SafeZone)",
    CurrentValue = false,
-   Flag = "AutoCollectToggle",
    Callback = function(Value)
         autoCollectEnabled = Value
+        while autoCollectEnabled do
+            startSteal()
+            task.wait(2)
+        end
    end,
 })
 
--- ⚙️ ЦИКЛ АВТОФАРМА ⚙️
-task.spawn(function()
-    while task.wait(1.5) do -- Проверяем каждые 1.5 секунды
-        if autoCollectEnabled and savedPosition then
-            local success = performSteal()
-            if success then
-                task.wait(1) -- Доп. пауза на базе, чтобы античит не ругался
-            end
-        end
+-- ВКЛАДКА UPGRADES (Набросок для теста)
+UpgradesTab:CreateButton({
+    Name = "Fix Upgrades (Beta)",
+    Callback = function()
+        Rayfield:Notify({Title = "Инфо", Content = "Скинь мне в следующем сообщении скриншот кнопок апгрейдов из Dex, чтобы я их привязал!", Duration = 5})
     end
-end)
-
-UpgradesTab:CreateSection("Функционал в разработке")
-UpgradesTab:CreateToggle({Name = "Auto Buy Speed +5", CurrentValue = false, Callback = function() end})
+})
