@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Norm HUB | ANTI-ROBUX",
+   Name = "Norm HUB | FIXED RADAR",
    LoadingTitle = "alphaversion so mb doesnt work rn",
-   LoadingSubtitle = "by Pxcv9t",
+   LoadingSubtitle = "by pxcv9t",
    ConfigurationSaving = {Enabled = false},
    KeySystem = false
 })
@@ -14,7 +14,16 @@ local savedPosition = nil
 local selectedRarity = "God"
 local autoCollectEnabled = false
 
--- Оригинальная функция получения координат
+-- Проверка на запрещенные базы (Easy/Normal)
+local function isForbiddenZone(obj)
+    local path = obj:GetFullName():lower()
+    if path:find("easy") or path:find("normal") then
+        return true
+    end
+    return false
+end
+
+-- Твоя рабочая функция координат
 local function getSafePosition(obj)
     if not obj then return nil end
     if obj:IsA("BasePart") then return obj.Position end
@@ -28,80 +37,77 @@ end
 
 local function getTargets()
     local validTargets = {}
+    print("--- СКАНИРОВАНИЕ ---")
     
-    -- 1. Собираем все кнопки
-    local allPrompts = {}
     for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("ProximityPrompt") then
-            table.insert(allPrompts, obj)
-        end
-    end
+        -- Ищем текст редкости
+        if obj:IsA("TextLabel") and string.find(obj.Text:lower(), selectedRarity:lower()) then
+            
+            -- 1. Проверка на базу Easy/Normal
+            if isForbiddenZone(obj) then
+                -- print("Пропуск: цель в базе Easy/Normal")
+                continue
+            end
 
-    -- 2. Ищем редкость
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("TextLabel") and obj.Text:lower():find(selectedRarity:lower()) then
-            
-            -- 🔥 ПРОВЕРКА НА РОБУКСЫ 🔥
-            local isRobuxItem = false
-            
-            -- Проверяем всю модель моба на наличие ценников
-            local model = obj:FindFirstAncestorOfClass("Model") or obj.Parent.Parent
+            -- 2. Проверка на Робуксы (только внутри этой модели)
+            local isPaid = false
+            local model = obj:FindFirstAncestorOfClass("Model")
             if model then
-                for _, descendant in pairs(model:GetDescendants()) do
-                    if descendant:IsA("TextLabel") then
-                        local t = descendant.Text:lower()
-                        -- Если видим значок робукса, слово buy или robux
-                        if t:find("r%$") or t:find("robux") or t:find("buy") or t:find("price") then
-                            isRobuxItem = true
+                for _, child in pairs(model:GetDescendants()) do
+                    if child:IsA("TextLabel") then
+                        local t = child.Text:lower()
+                        if t:find("r%$") or t:find("robux") or t:find("buy") then
+                            isPaid = true
                             break
                         end
                     end
                 end
             end
 
-            if not isRobuxItem then
-                local textPos = getSafePosition(obj)
-                if textPos then
-                    -- 3. Ищем ближайшую кнопку
-                    local closestPrompt = nil
-                    local minDist = 25
-                    
-                    for _, prompt in pairs(allPrompts) do
-                        local promptPos = getSafePosition(prompt.Parent)
-                        if promptPos then
-                            local dist = (promptPos - textPos).Magnitude
+            if isPaid then 
+                -- print("Пропуск: найден ценник (Robux/Buy)")
+                continue 
+            end
+
+            -- 3. Ищем кнопку
+            local textPos = getSafePosition(obj)
+            if textPos then
+                local closestPrompt = nil
+                local minDist = 30 -- Чуть увеличил радиус поиска кнопки
+                
+                for _, p in pairs(workspace:GetDescendants()) do
+                    if p:IsA("ProximityPrompt") then
+                        local pPos = getSafePosition(p.Parent)
+                        if pPos then
+                            local dist = (pPos - textPos).Magnitude
                             if dist < minDist then
-                                closestPrompt = prompt
+                                closestPrompt = p
                                 minDist = dist
                             end
                         end
                     end
-                    
-                    -- 4. Дополнительная проверка самой кнопки
-                    if closestPrompt then
-                        local actionText = closestPrompt.ActionText:lower()
-                        
-                        -- Если на кнопке написано "Купить" или она нажимается мгновенно (как в шопе)
-                        if actionText:find("buy") or actionText:find("robux") or closestPrompt.HoldDuration < 0.1 then
-                            isRobuxItem = true
-                        end
+                end
 
-                        -- Проверка на сейв-зону (твою базу)
-                        local isSafe = false
-                        if savedPosition then
-                            if (textPos - savedPosition.Position).Magnitude < 65 then
-                                isSafe = true
-                            end
-                        end
+                -- 4. Проверка самой кнопки и дистанции до базы
+                if closestPrompt then
+                    -- Проверка на "мгновенную покупку" (обычно это донат)
+                    if closestPrompt.HoldDuration < 0.1 then continue end
 
-                        if not isRobuxItem and not isSafe then
-                            table.insert(validTargets, {p = closestPrompt, pos = getSafePosition(closestPrompt.Parent) or textPos})
+                    local isSafeZone = false
+                    if savedPosition then
+                        if (textPos - savedPosition.Position).Magnitude < 65 then
+                            isSafeZone = true
                         end
+                    end
+
+                    if not isSafeZone then
+                        table.insert(validTargets, {p = closestPrompt, pos = getSafePosition(closestPrompt.Parent) or textPos})
                     end
                 end
             end
         end
     end
+    print("Найдено подходящих целей: " .. #validTargets)
     return validTargets
 end
 
@@ -110,7 +116,7 @@ MainTab:CreateButton({
    Callback = function()
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             savedPosition = player.Character.HumanoidRootPart.CFrame
-            Rayfield:Notify({Title = "OK", Content = "База зафиксирована!", Duration = 3})
+            Rayfield:Notify({Title = "OK", Content = "База сохранена!", Duration = 3})
         end
    end,
 })
@@ -122,7 +128,6 @@ MainTab:CreateDropdown({
    Callback = function(Option) selectedRarity = Option[1] end,
 })
 
--- Логика кражи (Оригинальная, без изменений)
 local function doSteal()
     local targets = getTargets()
     if #targets > 0 then
@@ -150,7 +155,7 @@ MainTab:CreateToggle({
         autoCollectEnabled = Value
         if Value then
             if not savedPosition then 
-                Rayfield:Notify({Title = "ОШИБКА", Content = "Нажми SAVE BASE!", Duration = 3})
+                Rayfield:Notify({Title = "СТОП", Content = "Сначала нажми SAVE BASE!", Duration = 3})
                 return 
             end
             task.spawn(function()
@@ -160,15 +165,5 @@ MainTab:CreateToggle({
                 end
             end)
         end
-   end,
-})
-
--- Кнопка для проверки в F9
-MainTab:CreateButton({
-   Name = "DEBUG: СКОЛЬКО БЕСПЛАТНЫХ? (F9)",
-   Callback = function()
-        print("--- СКАНИРОВАНИЕ ---")
-        local t = getTargets()
-        print("Найдено БЕСПЛАТНЫХ " .. selectedRarity .. ": " .. #t)
    end,
 })
