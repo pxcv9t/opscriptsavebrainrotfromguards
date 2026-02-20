@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Norm Hub | ANTI-ROBUX MAX",
-   LoadingTitle = "Loadin into the game...",
-   LoadingSubtitle = "by Pxcv9t",
+   Name = "KAITO HUB | RE-BORN EDITION",
+   LoadingTitle = "Перезапуск систем...",
+   LoadingSubtitle = "by Gemini",
    ConfigurationSaving = {Enabled = false},
    KeySystem = false
 })
@@ -13,8 +13,16 @@ local player = game.Players.LocalPlayer
 local savedPosition = nil
 local selectedRarity = "God"
 local autoCollectEnabled = false
+local blacklist = {}
 
-local blacklist = {} -- Черный список для пропуска сломанных/платных клеток
+-- Очистка черного списка каждые 30 секунд, чтобы скрипт не "зависал"
+task.spawn(function()
+    while true do
+        task.wait(30)
+        blacklist = {}
+        print("[System] Blacklist cleared")
+    end
+end)
 
 local function getSafePosition(obj)
     if not obj then return nil end
@@ -30,59 +38,41 @@ end
 local function getTargets()
     local validTargets = {}
     
-    local allPrompts = {}
+    -- Ищем все текстовые метки (редкости)
     for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("ProximityPrompt") then
-            table.insert(allPrompts, obj)
-        end
-    end
-
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("TextLabel") and obj.Text:lower():find(selectedRarity:lower()) then
-            local textPos = getSafePosition(obj) or (obj.Parent and getSafePosition(obj.Parent))
+        if obj:IsA("TextLabel") and string.find(obj.Text:lower(), selectedRarity:lower()) then
+            local textPos = getSafePosition(obj)
             
             if textPos then
+                -- Ищем ближайшую кнопку в радиусе 30 стадов
                 local closestPrompt = nil
-                local minDist = 25
+                local minDist = 30
                 
-                for _, prompt in pairs(allPrompts) do
-                    local promptPos = getSafePosition(prompt.Parent)
-                    if promptPos then
-                        local dist = (promptPos - textPos).Magnitude
-                        if dist < minDist then
-                            closestPrompt = prompt
-                            minDist = dist
+                for _, prompt in pairs(workspace:GetDescendants()) do
+                    if prompt:IsA("ProximityPrompt") and not blacklist[prompt] then
+                        local promptPos = getSafePosition(prompt.Parent)
+                        if promptPos then
+                            local dist = (promptPos - textPos).Magnitude
+                            if dist < minDist then
+                                closestPrompt = prompt
+                                minDist = dist
+                            end
                         end
                     end
                 end
                 
-                -- Если нашли кнопку и её нет в черном списке
-                if closestPrompt and not blacklist[closestPrompt] then
-                    -- 🔥 ЖЕСТКИЙ АНТИ-РОБУКС 🔥
-                    local isPaid = false
-                    
-                    -- 1. Платные обычно открываются моментально (без полоски загрузки)
-                    if closestPrompt.HoldDuration < 0.2 then isPaid = true end
-                    
-                    -- 2. Кнопка должна называться именно "Steal" (Украсть)
-                    if closestPrompt.ActionText:lower() ~= "steal" then isPaid = true end
-                    
-                    -- 3. Проверка названия зон (Easy, Normal)
-                    local path = closestPrompt:GetFullName():lower()
-                    if path:find("easy") or path:find("normal") or path:find("buy") then 
-                        isPaid = true 
-                    end
-                    
-                    -- 4. Проверка на Safe Zone
+                if closestPrompt then
+                    -- ПРОВЕРКИ
+                    local isRobux = closestPrompt.HoldDuration < 0.1 -- Донат обычно мгновенный
                     local isSafeZone = false
                     if savedPosition then
-                        local distToBase = (textPos - savedPosition.Position).Magnitude
-                        if distToBase < 65 then isSafeZone = true end
+                        if (textPos - savedPosition.Position).Magnitude < 65 then
+                            isSafeZone = true
+                        end
                     end
-                    
-                    -- Если клетка чистая, добавляем в список целей
-                    if not isPaid and not isSafeZone then
-                        table.insert(validTargets, {p = closestPrompt, pos = getSafePosition(closestPrompt.Parent) or textPos})
+
+                    if not isRobux and not isSafeZone then
+                        table.insert(validTargets, {p = closestPrompt, pos = getSafePosition(closestPrompt.Parent)})
                     end
                 end
             end
@@ -96,7 +86,7 @@ MainTab:CreateButton({
    Callback = function()
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             savedPosition = player.Character.HumanoidRootPart.CFrame
-            Rayfield:Notify({Title = "OK", Content = "База сохранена! Игнорируем зону вокруг.", Duration = 3})
+            Rayfield:Notify({Title = "OK", Content = "База сохранена!", Duration = 2})
         end
    end,
 })
@@ -114,21 +104,16 @@ local function doSteal()
         local target = targets[1]
         local hrp = player.Character.HumanoidRootPart
         
-        -- СРАЗУ добавляем клетку в блэклист на 10 секунд.
-        -- Если это багнутая клетка или донат, скрипт её бросит и полетит к следующей!
-        blacklist[target.p] = true 
-        task.delay(10, function() blacklist[target.p] = nil end)
-
-        -- Летим к клетке
-        hrp.CFrame = CFrame.new(target.pos + Vector3.new(0, 2, 0))
+        print("Target Found! Teleporting...")
+        blacklist[target.p] = true -- Временно помечаем, чтобы не зациклиться
+        
+        hrp.CFrame = CFrame.new(target.pos + Vector3.new(0, 3, 0))
         task.wait(0.3)
         hrp.Anchored = true
         
-        -- Взлом
         fireproximityprompt(target.p)
-        task.wait(target.p.HoldDuration + 0.3)
+        task.wait(target.p.HoldDuration + 0.5)
         
-        -- Домой
         hrp.Anchored = false
         hrp.CFrame = savedPosition
         return true
@@ -143,14 +128,13 @@ MainTab:CreateToggle({
         autoCollectEnabled = Value
         if Value then
             if not savedPosition then 
-                Rayfield:Notify({Title = "СТОП", Content = "Нажми SAVE BASE POSITION!", Duration = 3})
+                Rayfield:Notify({Title = "ОШИБКА", Content = "Сначала сохрани базу!", Duration = 3})
                 return 
             end
             task.spawn(function()
                 while autoCollectEnabled do
                     local success = doSteal()
-                    -- Если не нашел, проверяет карту чаще (0.5 сек). Если нашел и украл - отдыхает 1.5 сек.
-                    task.wait(success and 1.5 or 0.5) 
+                    task.wait(success and 1.5 or 2)
                 end
             end)
         end
