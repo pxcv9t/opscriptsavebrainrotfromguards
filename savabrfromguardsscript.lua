@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "KAITO HUB | FINAL FIX",
-   LoadingTitle = "Запуск принудительного фарма...",
-   LoadingSubtitle = "by Gemini",
+   Name = "Norm HUB | FIXED EDITION",
+   LoadingTitle = "Устранение критических ошибок...",
+   LoadingSubtitle = "by Pxcv9t",
    ConfigurationSaving = {Enabled = false},
    KeySystem = false
 })
@@ -14,32 +14,56 @@ local savedPosition = nil
 local selectedRarity = "God"
 local autoCollectEnabled = false
 
--- ГЛОБАЛЬНЫЙ ПОИСК ЦЕЛЕЙ
+-- Функция получения позиции объекта БЕЗ ОШИБОК
+local function getSafePosition(obj)
+    if obj:IsA("BasePart") then return obj.Position end
+    if obj:IsA("Attachment") then return obj.WorldPosition end
+    if obj:IsA("BillboardGui") then
+        if obj.Adornee then return getSafePosition(obj.Adornee) end
+        if obj.Parent:IsA("BasePart") then return obj.Parent.Position end
+    end
+    return nil
+end
+
 local function getTargets()
     local validTargets = {}
+    local allPrompts = game:GetService("ProximityPromptService"):GetDescendants()
     
-    for _, obj in pairs(workspace:GetDescendants()) do
-        -- 1. Ищем текст редкости
-        if obj:IsA("TextLabel") and string.find(obj.Text:lower(), selectedRarity:lower()) then
-            -- 2. Ищем ближайшую кнопку в радиусе 15 единиц
-            local model = obj:FindFirstAncestorOfClass("Model") or obj.Parent
-            for _, prompt in pairs(workspace:GetDescendants()) do
-                if prompt:IsA("ProximityPrompt") then
-                    local promptPos = (prompt.Parent:IsA("BasePart") and prompt.Parent.Position) or (prompt.Parent:IsA("Attachment") and prompt.Parent.WorldPosition)
-                    local textPos = obj.Parent.WorldPosition
-                    
-                    if promptPos and (promptPos - textPos).Magnitude < 15 then
-                        -- 3. ФИЛЬТРЫ (SafeZone и Анти-Робукс)
-                        local isPaid = string.find(obj.Text:lower(), "rbx") or string.find(obj.Text:lower(), "r%$")
-                        
-                        -- Проверка на SafeZone (если мы сохранили позицию)
-                        local isNearBase = false
-                        if savedPosition then
-                            local distToBase = (promptPos - savedPosition.Position).Magnitude
-                            if distToBase < 50 then isNearBase = true end -- Если ближе 50 метров к базе - игнор
+    for _, prompt in pairs(allPrompts) do
+        if prompt:IsA("ProximityPrompt") and prompt.ActionText == "Steal" then
+            local model = prompt:FindFirstAncestorOfClass("Model")
+            if model then
+                -- 1. Проверка на робуксы
+                local isPaid = false
+                for _, t in pairs(model:GetDescendants()) do
+                    if t:IsA("TextLabel") then
+                        local txt = t.Text:lower()
+                        if txt:find("r%$") or txt:find("robux") or txt:find("buy") then
+                            isPaid = true break
+                        end
+                    end
+                end
+
+                if not isPaid then
+                    -- 2. Проверка редкости
+                    local foundRarity = false
+                    for _, t in pairs(model:GetDescendants()) do
+                        if t:IsA("TextLabel") and t.Text:lower():find(selectedRarity:lower()) then
+                            foundRarity = true break
+                        end
+                    end
+
+                    if foundRarity then
+                        -- 3. Проверка на Safe Zone (дистанция от базы)
+                        local promptPos = getSafePosition(prompt.Parent)
+                        local tooClose = false
+                        if savedPosition and promptPos then
+                            if (promptPos - savedPosition.Position).Magnitude < 65 then
+                                tooClose = true
+                            end
                         end
 
-                        if not isPaid and not isNearBase then
+                        if not tooClose then
                             table.insert(validTargets, {p = prompt, m = model})
                         end
                     end
@@ -51,11 +75,11 @@ local function getTargets()
 end
 
 MainTab:CreateButton({
-   Name = "1. SAVE BASE POSITION (DO THIS FIRST)",
+   Name = "1. SAVE BASE POSITION",
    Callback = function()
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             savedPosition = player.Character.HumanoidRootPart.CFrame
-            Rayfield:Notify({Title = "СИСТЕМА", Content = "База сохранена. Скрипт будет игнорировать цели рядом с ней.", Duration = 3})
+            Rayfield:Notify({Title = "OK", Content = "База сохранена. Игнорируем зону вокруг неё.", Duration = 3})
         end
    end,
 })
@@ -67,26 +91,23 @@ MainTab:CreateDropdown({
    Callback = function(Option) selectedRarity = Option[1] end,
 })
 
--- Функция самого действия
 local function doSteal()
     local targets = getTargets()
     if #targets > 0 then
-        local target = targets[1] -- Берем первую найденную
+        local target = targets[1]
         local hrp = player.Character.HumanoidRootPart
+        local targetPos = getSafePosition(target.p.Parent)
         
-        -- ТП и заморозка
-        hrp.CFrame = (target.p.Parent:IsA("BasePart") and target.p.Parent.CFrame) or target.m.HumanoidRootPart.CFrame
-        task.wait(0.2)
-        hrp.Anchored = true
-        
-        -- Активация
-        fireproximityprompt(target.p)
-        task.wait(target.p.HoldDuration + 0.5)
-        
-        -- Домой
-        hrp.Anchored = false
-        hrp.CFrame = savedPosition
-        return true
+        if targetPos then
+            hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+            task.wait(0.2)
+            hrp.Anchored = true
+            fireproximityprompt(target.p)
+            task.wait(target.p.HoldDuration + 0.5)
+            hrp.Anchored = false
+            hrp.CFrame = savedPosition
+            return true
+        end
     end
     return false
 end
@@ -98,29 +119,15 @@ MainTab:CreateToggle({
         autoCollectEnabled = Value
         if Value then
             if not savedPosition then 
-                Rayfield:Notify({Title = "ОШИБКА", Content = "Сначала сохрани позицию базы!", Duration = 5})
+                Rayfield:Notify({Title = "ВНИМАНИЕ", Content = "Сначала нажми SAVE BASE!", Duration = 5})
                 return 
             end
             task.spawn(function()
                 while autoCollectEnabled do
-                    local success = doSteal()
-                    task.wait(success and 2 or 1) -- Если украл - пауза 2 сек, если не нашел - 1 сек.
+                    doSteal()
+                    task.wait(2)
                 end
             end)
         end
-   end,
-})
-
--- КНОПКА ОТЛАДКИ (ЕСЛИ ОПЯТЬ НИЧЕГО НЕ ПРОИСХОДИТ)
-MainTab:CreateButton({
-   Name = "DEBUG: SCAN MAP (PRESS F9)",
-   Callback = function()
-        print("--- ОТЧЕТ СКАНЕРА ---")
-        local targets = getTargets()
-        print("Найдено подходящих целей: " .. #targets)
-        for i, t in pairs(targets) do
-            print(i .. ". Кнопка найдена в: " .. t.p:GetFullName())
-        end
-        print("---------------------")
    end,
 })
