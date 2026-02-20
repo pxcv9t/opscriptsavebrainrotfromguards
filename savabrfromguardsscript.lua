@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "KAITO HUB | RADAR EDITION",
-   LoadingTitle = "Запуск радара...",
-   LoadingSubtitle = "by Gemini",
+   Name = "Norm Hub | ANTI-ROBUX MAX",
+   LoadingTitle = "Loadin into the game...",
+   LoadingSubtitle = "by Pxcv9t",
    ConfigurationSaving = {Enabled = false},
    KeySystem = false
 })
@@ -14,7 +14,8 @@ local savedPosition = nil
 local selectedRarity = "God"
 local autoCollectEnabled = false
 
--- Функция безопасного получения координат
+local blacklist = {} -- Черный список для пропуска сломанных/платных клеток
+
 local function getSafePosition(obj)
     if not obj then return nil end
     if obj:IsA("BasePart") then return obj.Position end
@@ -29,7 +30,6 @@ end
 local function getTargets()
     local validTargets = {}
     
-    -- 1. Собираем все кнопки на карте (один раз, чтобы не лагало)
     local allPrompts = {}
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("ProximityPrompt") then
@@ -37,56 +37,52 @@ local function getTargets()
         end
     end
 
-    -- 2. Ищем текст с нужной редкостью
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("TextLabel") and obj.Text:lower():find(selectedRarity:lower()) then
+            local textPos = getSafePosition(obj) or (obj.Parent and getSafePosition(obj.Parent))
             
-            -- Анти-Робукс (проверяем соседей по модельке)
-            local isPaid = false
-            local model = obj:FindFirstAncestorOfClass("Model")
-            if model then
-                for _, t in pairs(model:GetDescendants()) do
-                    if t:IsA("TextLabel") then
-                        local txt = t.Text:lower()
-                        if txt:find("r%$") or txt:find("robux") or txt:find("buy") then
-                            isPaid = true break
+            if textPos then
+                local closestPrompt = nil
+                local minDist = 25
+                
+                for _, prompt in pairs(allPrompts) do
+                    local promptPos = getSafePosition(prompt.Parent)
+                    if promptPos then
+                        local dist = (promptPos - textPos).Magnitude
+                        if dist < minDist then
+                            closestPrompt = prompt
+                            minDist = dist
                         end
                     end
                 end
-            end
-
-            if not isPaid then
-                local textPos = getSafePosition(obj) or (obj.Parent and getSafePosition(obj.Parent))
                 
-                if textPos then
-                    -- 3. Ищем ближайшую кнопку к этому тексту (в радиусе 25 стадов)
-                    local closestPrompt = nil
-                    local minDist = 25
+                -- Если нашли кнопку и её нет в черном списке
+                if closestPrompt and not blacklist[closestPrompt] then
+                    -- 🔥 ЖЕСТКИЙ АНТИ-РОБУКС 🔥
+                    local isPaid = false
                     
-                    for _, prompt in pairs(allPrompts) do
-                        local promptPos = getSafePosition(prompt.Parent)
-                        if promptPos then
-                            local dist = (promptPos - textPos).Magnitude
-                            if dist < minDist then
-                                closestPrompt = prompt
-                                minDist = dist
-                            end
-                        end
+                    -- 1. Платные обычно открываются моментально (без полоски загрузки)
+                    if closestPrompt.HoldDuration < 0.2 then isPaid = true end
+                    
+                    -- 2. Кнопка должна называться именно "Steal" (Украсть)
+                    if closestPrompt.ActionText:lower() ~= "steal" then isPaid = true end
+                    
+                    -- 3. Проверка названия зон (Easy, Normal)
+                    local path = closestPrompt:GetFullName():lower()
+                    if path:find("easy") or path:find("normal") or path:find("buy") then 
+                        isPaid = true 
                     end
                     
-                    -- 4. Если кнопка найдена, проверяем, не на базе ли она
-                    if closestPrompt then
-                        local isSafeZone = false
-                        if savedPosition then
-                            local distToBase = (textPos - savedPosition.Position).Magnitude
-                            if distToBase < 65 then
-                                isSafeZone = true -- Слишком близко к базе
-                            end
-                        end
-                        
-                        if not isSafeZone then
-                            table.insert(validTargets, {p = closestPrompt, pos = getSafePosition(closestPrompt.Parent) or textPos})
-                        end
+                    -- 4. Проверка на Safe Zone
+                    local isSafeZone = false
+                    if savedPosition then
+                        local distToBase = (textPos - savedPosition.Position).Magnitude
+                        if distToBase < 65 then isSafeZone = true end
+                    end
+                    
+                    -- Если клетка чистая, добавляем в список целей
+                    if not isPaid and not isSafeZone then
+                        table.insert(validTargets, {p = closestPrompt, pos = getSafePosition(closestPrompt.Parent) or textPos})
                     end
                 end
             end
@@ -100,7 +96,7 @@ MainTab:CreateButton({
    Callback = function()
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             savedPosition = player.Character.HumanoidRootPart.CFrame
-            Rayfield:Notify({Title = "OK", Content = "База сохранена! Радиус 65 метров защищен.", Duration = 3})
+            Rayfield:Notify({Title = "OK", Content = "База сохранена! Игнорируем зону вокруг.", Duration = 3})
         end
    end,
 })
@@ -118,9 +114,14 @@ local function doSteal()
         local target = targets[1]
         local hrp = player.Character.HumanoidRootPart
         
-        -- Летим к кнопке
+        -- СРАЗУ добавляем клетку в блэклист на 10 секунд.
+        -- Если это багнутая клетка или донат, скрипт её бросит и полетит к следующей!
+        blacklist[target.p] = true 
+        task.delay(10, function() blacklist[target.p] = nil end)
+
+        -- Летим к клетке
         hrp.CFrame = CFrame.new(target.pos + Vector3.new(0, 2, 0))
-        task.wait(0.2)
+        task.wait(0.3)
         hrp.Anchored = true
         
         -- Взлом
@@ -148,31 +149,10 @@ MainTab:CreateToggle({
             task.spawn(function()
                 while autoCollectEnabled do
                     local success = doSteal()
-                    task.wait(success and 1.5 or 2)
+                    -- Если не нашел, проверяет карту чаще (0.5 сек). Если нашел и украл - отдыхает 1.5 сек.
+                    task.wait(success and 1.5 or 0.5) 
                 end
             end)
         end
-   end,
-})
-
--- СПЕЦИАЛЬНАЯ КНОПКА ОТЛАДКИ
-MainTab:CreateButton({
-   Name = "DEBUG: ПОЧЕМУ ОН МОЛЧИТ? (F9)",
-   Callback = function()
-        print("--- СКАНИРОВАНИЕ КАРТЫ ---")
-        if not savedPosition then print("ОШИБКА: База не сохранена!") return end
-        
-        local targets = getTargets()
-        print("Найдено целей (God), которые можно украсть: " .. #targets)
-        
-        if #targets == 0 then
-            print("Возможные причины:")
-            print("1. На карте сейчас нет диких брейнротов с редкостью " .. selectedRarity)
-            print("2. Все " .. selectedRarity .. " находятся в платных зонах (Easy/Normal/Robux)")
-            print("3. Они спавнятся слишком близко к твоей базе (менее 65 стадов)")
-        else
-            print("Цели есть! Автофарм должен работать.")
-        end
-        print("--------------------------")
    end,
 })
