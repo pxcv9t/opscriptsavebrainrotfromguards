@@ -1,7 +1,7 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Norm HUB | REBORN",
+   Name = "Norm HUB | DEBUG EDITION",
    LoadingTitle = "alphaversion so mb doesnt work rn",
    LoadingSubtitle = "by Pxcv9t",
    ConfigurationSaving = {Enabled = false},
@@ -14,33 +14,34 @@ local savedPosition = nil
 local selectedRarity = "God"
 local autoCollectEnabled = false
 
--- 1. Функция проверки на Робуксы и Зоны
-local function checkTarget(obj)
-    local path = obj:GetFullName():lower()
+-- 1. УМНЫЙ ФИЛЬТР (ЗОНЫ И РОБУКСЫ)
+local function getTargetStatus(obj)
+    local fullName = obj:GetFullName():lower()
     
-    -- Проверка на Easy/Normal зоны
-    if path:find("easy") or path:find("normal") then
-        return false, "Зона Easy/Normal"
+    -- Проверка на запрещенные зоны
+    if fullName:find("easy") or fullName:find("normal") then
+        return false, "Зона: Easy/Normal"
     end
     
-    -- Поиск признаков доната в модели
+    -- Ищем признаки робуксов ТОЛЬКО внутри модели моба
     local model = obj:FindFirstAncestorOfClass("Model")
     if model then
-        for _, descendant in pairs(model:GetDescendants()) do
-            if descendant:IsA("TextLabel") then
-                local t = descendant.Text:lower()
-                if t:find("r$") or t:find("robux") or t:find("buy") then
-                    return false, "Обнаружен донат (R$/Buy)"
+        for _, item in pairs(model:GetDescendants()) do
+            if item:IsA("TextLabel") then
+                local text = item.Text:lower()
+                if text:find("r%$") or text:find("robux") or text:find("buy") then
+                    return false, "Платный (Найдено: " .. item.Text .. ")"
                 end
             end
         end
     end
     
-    return true
+    return true, "OK"
 end
 
--- 2. Безопасные координаты
-local function getPos(obj)
+-- 2. ПОЛУЧЕНИЕ КООРДИНАТ
+local function getSafePosition(obj)
+    if not obj then return nil end
     if obj:IsA("BasePart") then return obj.Position end
     if obj:IsA("BillboardGui") and obj.Adornee then return obj.Adornee.Position end
     if obj.Parent and obj.Parent:IsA("BasePart") then return obj.Parent.Position end
@@ -48,40 +49,58 @@ local function getPos(obj)
 end
 
 local function getTargets()
-    local targets = {}
-    print("--- ЗАПУСК СКАНЕРА ---")
-
+    local validTargets = {}
+    print("--- НОВЫЙ ЦИКЛ ПОИСКА ---")
+    
+    -- Сначала находим ВСЕ надписи с нужной редкостью
     for _, obj in pairs(workspace:GetDescendants()) do
-        -- Ищем надпись редкости
         if obj:IsA("TextLabel") and obj.Text:lower():find(selectedRarity:lower()) then
             
-            local isGood, reason = checkTarget(obj)
+            local isGood, reason = getTargetStatus(obj)
+            
             if isGood then
-                -- Ищем кнопку в той же модели или рядом
-                local parent = obj:FindFirstAncestorOfClass("Model") or obj.Parent
-                local prompt = parent:FindFirstChildWhichIsA("ProximityPrompt", true)
+                -- Если моб бесплатный, ищем кнопку ВНУТРИ его модели
+                local model = obj:FindFirstAncestorOfClass("Model")
+                local prompt = model and model:FindFirstChildWhichIsA("ProximityPrompt", true)
                 
-                if prompt then
-                    -- Проверяем, не на нашей ли это базе
-                    local pos = getPos(prompt.Parent) or getPos(obj)
-                    if pos and savedPosition then
-                        local distToBase = (pos - savedPosition.Position).Magnitude
-                        if distToBase > 50 then -- Если дальше 50 стадов от базы
-                            table.insert(targets, {p = prompt, pos = pos})
+                -- Если в модели нет, ищем ближайшую в радиусе 20 стадов
+                if not prompt then
+                    for _, p in pairs(workspace:GetDescendants()) do
+                        if p:IsA("ProximityPrompt") then
+                            local pPos = getSafePosition(p.Parent)
+                            local tPos = getSafePosition(obj)
+                            if pPos and tPos and (pPos - tPos).Magnitude < 20 then
+                                prompt = p break
+                            end
                         end
                     end
                 end
+
+                if prompt then
+                    local pos = getSafePosition(prompt.Parent)
+                    -- Проверка на расстояние от базы (чтобы не воровать у себя)
+                    if savedPosition and pos then
+                        if (pos - savedPosition.Position).Magnitude > 50 then
+                            table.insert(validTargets, {p = prompt, pos = pos})
+                        else
+                            -- print("Пропуск: Слишком близко к твоей базе")
+                        end
+                    end
+                else
+                    print("Предупреждение: Не нашел кнопку для " .. obj.Text)
+                end
             else
-                -- print("Пропущено: " .. reason) -- Раскомментируй для детального лога
+                -- Это сообщение объяснит, почему God игнорируется
+                print("Игнор " .. obj.Text .. " | Причина: " .. reason)
             end
         end
     end
     
-    print("Найдено целей: " .. #targets)
-    return targets
+    print("ИТОГО: Найдено рабочих целей: " .. #validTargets)
+    return validTargets
 end
 
--- ИНТЕРФЕЙС
+-- 3. ИНТЕРФЕЙС
 MainTab:CreateButton({
    Name = "1. SAVE BASE POSITION",
    Callback = function()
@@ -105,16 +124,13 @@ local function doSteal()
         local target = targets[1]
         local hrp = player.Character.HumanoidRootPart
         
-        -- Летим
         hrp.CFrame = CFrame.new(target.pos + Vector3.new(0, 3, 0))
         task.wait(0.2)
         hrp.Anchored = true
         
-        -- Жмем
         fireproximityprompt(target.p)
         task.wait(target.p.HoldDuration + 0.3)
         
-        -- Домой
         hrp.Anchored = false
         hrp.CFrame = savedPosition
         return true
@@ -129,13 +145,13 @@ MainTab:CreateToggle({
         autoCollectEnabled = Value
         if Value then
             if not savedPosition then 
-                Rayfield:Notify({Title = "ОШИБКА", Content = "Сначала нажми SAVE BASE!", Duration = 3})
+                Rayfield:Notify({Title = "СТОП", Content = "Нажми кнопку 1!", Duration = 3})
                 return 
             end
             task.spawn(function()
                 while autoCollectEnabled do
                     local success = doSteal()
-                    task.wait(success and 1 or 2)
+                    task.wait(success and 1.5 or 2.5)
                 end
             end)
         end
