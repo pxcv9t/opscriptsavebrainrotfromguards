@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Norm HUB | RADAR EDITION",
-   LoadingTitle = "u are gay...",
-   LoadingSubtitle = "by Pxcv9t",
+   Name = "KAITO HUB | RADAR EDITION",
+   LoadingTitle = "Запуск радара...",
+   LoadingSubtitle = "by Gemini",
    ConfigurationSaving = {Enabled = false},
    KeySystem = false
 })
@@ -14,7 +14,23 @@ local savedPosition = nil
 local selectedRarity = "God"
 local autoCollectEnabled = false
 
--- Функция безопасного получения координат (БЕЗ ИЗМЕНЕНИЙ)
+-- Функция проверки: не находится ли объект в запрещенной зоне (Easy/Normal)
+local function isForbidden(obj)
+    local forbiddenNames = {"easy", "normal"}
+    local current = obj
+    while current and current ~= workspace do
+        local name = current.Name:lower()
+        for _, forbidden in pairs(forbiddenNames) do
+            if name:find(forbidden) then
+                return true
+            end
+        end
+        current = current.Parent
+    end
+    return false
+end
+
+-- Функция безопасного получения координат (Твоя рабочая версия)
 local function getSafePosition(obj)
     if not obj then return nil end
     if obj:IsA("BasePart") then return obj.Position end
@@ -33,7 +49,10 @@ local function getTargets()
     local allPrompts = {}
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("ProximityPrompt") then
-            table.insert(allPrompts, obj)
+            -- Сразу отсекаем кнопки в Easy/Normal зонах
+            if not isForbidden(obj) then
+                table.insert(allPrompts, obj)
+            end
         end
     end
 
@@ -41,55 +60,55 @@ local function getTargets()
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("TextLabel") and obj.Text:lower():find(selectedRarity:lower()) then
             
-            -- Проверка на робуксы (твоя логика)
-            local isPaid = false
-            local model = obj:FindFirstAncestorOfClass("Model")
-            if model then
-                for _, t in pairs(model:GetDescendants()) do
-                    if t:IsA("TextLabel") then
-                        local txt = t.Text:lower()
-                        if txt:find("r$") or txt:find("robux") or txt:find("buy") then
-                            isPaid = true break
+            -- Проверка на Easy/Normal зоны для самого текста
+            if not isForbidden(obj) then
+                
+                -- Твоя логика проверки на робуксы (через соседей по модели)
+                local isPaid = false
+                local model = obj:FindFirstAncestorOfClass("Model")
+                if model then
+                    for _, t in pairs(model:GetDescendants()) do
+                        if t:IsA("TextLabel") then
+                            local txt = t.Text:lower()
+                            if txt:find("r$") or txt:find("robux") or txt:find("buy") then
+                                isPaid = true break
+                            end
                         end
                     end
                 end
-            end
 
-            -- ДОБАВЛЕННЫЙ ФИЛЬТР ЗОН (EASY / NORMAL)
-            local fullPath = obj:GetFullName():lower()
-            local isForbiddenZone = string.find(fullPath, "easy") or string.find(fullPath, "normal")
-
-            if not isPaid and not isForbiddenZone then
-                local textPos = getSafePosition(obj) or (obj.Parent and getSafePosition(obj.Parent))
-                
-                if textPos then
-                    -- 3. Ищем ближайшую кнопку к тексту
-                    local closestPrompt = nil
-                    local minDist = 25
+                if not isPaid then
+                    local textPos = getSafePosition(obj) or (obj.Parent and getSafePosition(obj.Parent))
                     
-                    for _, prompt in pairs(allPrompts) do
-                        local promptPos = getSafePosition(prompt.Parent)
-                        if promptPos then
-                            local dist = (promptPos - textPos).Magnitude
-                            if dist < minDist then
-                                closestPrompt = prompt
-                                minDist = dist
-                            end
-                        end
-                    end
-                    
-                    -- 4. Проверка на Safe Zone
-                    if closestPrompt then
-                        local isSafeZone = false
-                        if savedPosition then
-                            local distToBase = (textPos - savedPosition.Position).Magnitude
-                            if distToBase < 65 then
-                                isSafeZone = true 
+                    if textPos then
+                        -- 3. Ищем ближайшую кнопку к этому тексту
+                        local closestPrompt = nil
+                        local minDist = 25
+                        
+                        for _, prompt in pairs(allPrompts) do
+                            local promptPos = getSafePosition(prompt.Parent)
+                            if promptPos then
+                                local dist = (promptPos - textPos).Magnitude
+                                if dist < minDist then
+                                    closestPrompt = prompt
+                                    minDist = dist
+                                end
                             end
                         end
                         
-                        if not isSafeZone then
-                            table.insert(validTargets, {p = closestPrompt, pos = getSafePosition(closestPrompt.Parent) or textPos})
+                        -- 4. Проверка на Safe Zone (базу)
+                        if closestPrompt then
+                            local isSafeZone = false
+                            if savedPosition then
+                                local distToBase = (textPos - savedPosition.Position).Magnitude
+                                if distToBase < 65 then
+                                    isSafeZone = true 
+                                end
+                            end
+                            
+                            if not isSafeZone then
+                                table.insert(validTargets, {p = closestPrompt, pos = getSafePosition(closestPrompt.Parent) or textPos})
+                            end
                         end
                     end
                 end
@@ -116,7 +135,6 @@ MainTab:CreateDropdown({
    Callback = function(Option) selectedRarity = Option[1] end,
 })
 
--- Логика кражи (БЕЗ ИЗМЕНЕНИЙ)
 local function doSteal()
     local targets = getTargets()
     if #targets > 0 then
@@ -154,14 +172,5 @@ MainTab:CreateToggle({
                 end
             end)
         end
-   end,
-})
-
-MainTab:CreateButton({
-   Name = "DEBUG: SCAN MAP (F9)",
-   Callback = function()
-        print("--- СКАНИРОВАНИЕ ---")
-        local targets = getTargets()
-        print("Доступно целей: " .. #targets)
    end,
 })
