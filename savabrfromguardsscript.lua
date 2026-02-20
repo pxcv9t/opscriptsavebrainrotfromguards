@@ -1,8 +1,8 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "KAITO HUB | RADAR EDITION",
-   LoadingTitle = "Запуск радара...",
+   Name = "KAITO HUB | TOTAL FILTER",
+   LoadingTitle = "Настройка фильтров...",
    LoadingSubtitle = "by Gemini",
    ConfigurationSaving = {Enabled = false},
    KeySystem = false
@@ -14,24 +14,17 @@ local savedPosition = nil
 local selectedRarity = "God"
 local autoCollectEnabled = false
 
--- Функция проверки: не находится ли объект в запрещенной базе (Easy/Normal)
-local function isForbidden(obj)
+-- ГЛОБАЛЬНЫЙ ФИЛЬТР ЗОН
+local function isInsideForbiddenZone(obj)
     if not obj then return false end
-    local forbiddenNames = {"easy", "normal"}
-    local current = obj
-    while current and current ~= workspace do
-        local name = current.Name:lower()
-        for _, word in pairs(forbiddenNames) do
-            if string.find(name, word) then
-                return true -- Нашли запрещенное слово в названии папки/модели
-            end
-        end
-        current = current.Parent
+    local fullName = obj:GetFullName():lower()
+    -- Если в пути есть эти слова - зона запрещена
+    if fullName:find("easy") or fullName:find("normal") then
+        return true
     end
     return false
 end
 
--- Твоя оригинальная функция получения координат
 local function getSafePosition(obj)
     if not obj then return nil end
     if obj:IsA("BasePart") then return obj.Position end
@@ -46,22 +39,25 @@ end
 local function getTargets()
     local validTargets = {}
     
-    -- Собираем все кнопки (но пропускаем те, что в Easy/Normal)
+    -- 1. Предварительная фильтрация кнопок
     local allPrompts = {}
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("ProximityPrompt") then
-            if not isForbidden(obj) then
+            if not isInsideForbiddenZone(obj) then
                 table.insert(allPrompts, obj)
             end
         end
     end
 
-    -- Ищем текст редкости
+    -- 2. Поиск целей
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("TextLabel") and obj.Text:lower():find(selectedRarity:lower()) then
             
-            -- ПРОВЕРКА: Если этот текст в базе Easy или Normal - пропускаем
-            if isForbidden(obj) then continue end
+            -- ПРОВЕРКА ЗОНЫ
+            if isInsideForbiddenZone(obj) then
+                -- print("[SKIP] Пропускаю " .. selectedRarity .. " (Находится в Easy/Normal базе)")
+                continue 
+            end
 
             -- Твоя проверка на робуксы
             local isPaid = false
@@ -78,8 +74,7 @@ local function getTargets()
             end
 
             if not isPaid then
-                local textPos = getSafePosition(obj) or (obj.Parent and getSafePosition(obj.Parent))
-                
+                local textPos = getSafePosition(obj)
                 if textPos then
                     local closestPrompt = nil
                     local minDist = 25
@@ -96,15 +91,7 @@ local function getTargets()
                     end
                     
                     if closestPrompt then
-                        local isSafeZone = false
-                        if savedPosition then
-                            local distToBase = (textPos - savedPosition.Position).Magnitude
-                            if distToBase < 65 then
-                                isSafeZone = true 
-                            end
-                        end
-                        
-                        if not isSafeZone then
+                        if savedPosition and (textPos - savedPosition.Position).Magnitude > 65 then
                             table.insert(validTargets, {p = closestPrompt, pos = getSafePosition(closestPrompt.Parent) or textPos})
                         end
                     end
@@ -159,7 +146,7 @@ MainTab:CreateToggle({
         autoCollectEnabled = Value
         if Value then
             if not savedPosition then 
-                Rayfield:Notify({Title = "СТОП", Content = "Нажми SAVE BASE POSITION!", Duration = 3})
+                Rayfield:Notify({Title = "СТОП", Content = "Сначала сохрани базу!", Duration = 3})
                 return 
             end
             task.spawn(function()
@@ -172,12 +159,24 @@ MainTab:CreateToggle({
    end,
 })
 
--- ОБНОВЛЕННАЯ ОТЛАДКА
+-- КНОПКА ПРОВЕРКИ ЗОН
 MainTab:CreateButton({
-   Name = "DEBUG: ПОЧЕМУ ОН МОЛЧИТ? (F9)",
+   Name = "DEBUG: ПОКАЗАТЬ ОТСЕЯННЫЕ ЗОНЫ (F9)",
    Callback = function()
-        print("--- СКАНИРОВАНИЕ КАРТЫ ---")
-        local t = getTargets()
-        print("Найдено целей (God) вне запретных зон: " .. #t)
+        print("--- СТАТУС ФИЛЬТРАЦИИ ---")
+        local totalGods = 0
+        local forbiddenGods = 0
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("TextLabel") and obj.Text:lower():find(selectedRarity:lower()) then
+                totalGods = totalGods + 1
+                if isInsideForbiddenZone(obj) then
+                    forbiddenGods = forbiddenGods + 1
+                    print("[БЛОК] Нашел " .. selectedRarity .. " в базе: " .. obj.Parent.Name)
+                end
+            end
+        end
+        print("Всего " .. selectedRarity .. " на карте: " .. totalGods)
+        print("Из них в Easy/Normal базах: " .. forbiddenGods)
+        print("Доступно для кражи: " .. (totalGods - forbiddenGods))
    end,
 })
