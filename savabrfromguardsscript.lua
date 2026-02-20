@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "KAITO HUB | ANTI-ROBUX EDITION",
-   LoadingTitle = "Запуск радара...",
-   LoadingSubtitle = "by Gemini",
+   Name = "Norm HUB | RADAR EDITION",
+   LoadingTitle = "alphaversion so mb doesnt work rn",
+   LoadingSubtitle = "by Pxcv9t",
    ConfigurationSaving = {Enabled = false},
    KeySystem = false
 })
@@ -14,7 +14,18 @@ local savedPosition = nil
 local selectedRarity = "God"
 local autoCollectEnabled = false
 
--- Функция безопасного получения координат (Не тронута)
+-- Функция проверки: не находится ли объект в запрещенной базе
+local function isInsideForbiddenBase(obj)
+    if not obj then return false end
+    -- Получаем полный путь объекта (например, Workspace.Bases.EasyBase.Slot)
+    local path = obj:GetFullName():lower()
+    if path:find("easy") or path:find("normal") then
+        return true
+    end
+    return false
+end
+
+-- Твоя оригинальная функция координат
 local function getSafePosition(obj)
     if not obj then return nil end
     if obj:IsA("BasePart") then return obj.Position end
@@ -29,36 +40,37 @@ end
 local function getTargets()
     local validTargets = {}
     
-    -- 1. Собираем все кнопки на карте (один раз, чтобы не лагало)
+    -- 1. Собираем кнопки, СРАЗУ игнорируя Easy/Normal
     local allPrompts = {}
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("ProximityPrompt") then
-            table.insert(allPrompts, obj)
+            if not isInsideForbiddenBase(obj) then
+                table.insert(allPrompts, obj)
+            end
         end
     end
 
-    -- 2. Ищем текст с нужной редкостью
+    -- 2. Ищем текст редкости
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("TextLabel") and obj.Text:lower():find(selectedRarity:lower()) then
             
-            -- 🔥 ЖЕСТКИЙ АНТИ-РОБУКС: ПРОВЕРКА ОКРУЖЕНИЯ 🔥
+            -- ПРОПУСКАЕМ, если текст находится в запрещенной базе
+            if isInsideForbiddenBase(obj) then continue end
+
+            -- Твоя проверка на робуксы (R$, Buy)
             local isPaid = false
             local model = obj:FindFirstAncestorOfClass("Model")
-            
             if model then
-                -- Ищем ценники (R$, Robux, Buy) вокруг найденного моба
                 for _, t in pairs(model:GetDescendants()) do
                     if t:IsA("TextLabel") then
                         local txt = t.Text:lower()
-                        if txt:find("r$") or txt:find("robux") or txt:find("buy") or txt:find("claim") then
-                            isPaid = true
-                            break
+                        if txt:find("r$") or txt:find("robux") or txt:find("buy") then
+                            isPaid = true break
                         end
                     end
                 end
             end
 
-            -- Если ценников нет, продолжаем работу
             if not isPaid then
                 local textPos = getSafePosition(obj) or (obj.Parent and getSafePosition(obj.Parent))
                 
@@ -78,24 +90,8 @@ local function getTargets()
                         end
                     end
                     
-                    -- 🔥 АНТИ-РОБУКС: ПРОВЕРКА САМОЙ КНОПКИ 🔥
+                    -- 4. Проверка на Safe Zone (твоя база)
                     if closestPrompt then
-                        local action = (closestPrompt.ActionText or ""):lower()
-                        local object = (closestPrompt.ObjectText or ""):lower()
-                        
-                        -- Проверяем, что написано на самой кнопке
-                        if action:find("buy") or action:find("robux") or action:find("r$") or action:find("claim") then
-                            isPaid = true
-                        end
-                        if object:find("buy") or object:find("robux") or object:find("r$") or object:find("claim") then
-                            isPaid = true
-                        end
-                        -- Платные кнопки обычно нажимаются мгновенно (без задержки)
-                        if closestPrompt.HoldDuration < 0.1 then
-                            isPaid = true
-                        end
-
-                        -- 4. Проверка на Safe Zone (Твоя база)
                         local isSafeZone = false
                         if savedPosition then
                             local distToBase = (textPos - savedPosition.Position).Magnitude
@@ -104,8 +100,7 @@ local function getTargets()
                             end
                         end
                         
-                        -- Если моб БЕСПЛАТНЫЙ и не на базе - добавляем в цели!
-                        if not isPaid and not isSafeZone then
+                        if not isSafeZone then
                             table.insert(validTargets, {p = closestPrompt, pos = getSafePosition(closestPrompt.Parent) or textPos})
                         end
                     end
@@ -133,7 +128,7 @@ MainTab:CreateDropdown({
    Callback = function(Option) selectedRarity = Option[1] end,
 })
 
--- Функция кражи (Не тронута)
+-- Логика ТП и кражи (Без изменений)
 local function doSteal()
     local targets = getTargets()
     if #targets > 0 then
@@ -170,25 +165,6 @@ MainTab:CreateToggle({
                     task.wait(success and 1.5 or 2)
                 end
             end)
-        end
-   end,
-})
-
--- СПЕЦИАЛЬНАЯ КНОПКА ОТЛАДКИ (Твоя оригинальная)
-MainTab:CreateButton({
-   Name = "DEBUG: ПОЧЕМУ ОН МОЛЧИТ? (F9)",
-   Callback = function()
-        print("--- СКАНИРОВАНИЕ КАРТЫ ---")
-        if not savedPosition then print("ОШИБКА: База не сохранена!") return end
-        
-        local targets = getTargets()
-        print("Найдено целей (" .. selectedRarity .. "), которые можно украсть: " .. #targets)
-        
-        if #targets == 0 then
-            print("Возможные причины:")
-            print("1. На карте сейчас нет диких брейнротов с редкостью " .. selectedRarity)
-            print("2. Все " .. selectedRarity .. " ПЛАТНЫЕ (Анти-Робукс их отсек)")
-            print("3. Они спавнятся слишком близко к твоей базе (менее 65 стадов)")
         end
    end,
 })
