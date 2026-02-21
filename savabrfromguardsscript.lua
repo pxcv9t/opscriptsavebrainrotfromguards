@@ -3,7 +3,7 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
    Name = "KAITO HUB | RADAR EDITION",
    LoadingTitle = "Запуск радара...",
-   LoadingSubtitle = "by Gemini",
+   LoadingSubtitle = "Blacklist Fix",
    ConfigurationSaving = {Enabled = false},
    KeySystem = false
 })
@@ -14,58 +14,62 @@ local savedPosition = nil
 local selectedRarity = "God"
 local autoCollectEnabled = false
 
--- Настройки блеклиста зон
-local zoneSettings = {
-    ["EASY"] = true,
-    ["NORMAL"] = true
-}
+-- Состояние блеклиста (по умолчанию выключены, как на твоём видео)
+local ignoreEasy = false
+local ignoreNormal = false
 
--- Функция безопасного получения координат (из твоего оригинала)
+-- Функция получения координат (из твоего оригинала)
 local function getSafePosition(obj)
     if not obj then return nil end
     if obj:IsA("BasePart") then return obj.Position end
     if obj:IsA("Attachment") then return obj.WorldPosition end
-    if obj:IsA("BillboardGui") or obj:IsA("TextLabel") then
-        if obj:IsA("BillboardGui") and obj.Adornee then return getSafePosition(obj.Adornee) end
-        if obj.Parent and obj.Parent:IsA("BasePart") then return obj.Parent.Position end
-    end
+    if obj:IsA("BillboardGui") and obj.Adornee then return getSafePosition(obj.Adornee) end
+    if obj.Parent and obj.Parent:IsA("BasePart") then return obj.Parent.Position end
     return nil
+end
+
+-- УЛУЧШЕННАЯ ПРОВЕРКА ЗОНЫ
+local function isInsideBlacklistedZone(targetObj)
+    local model = targetObj:FindFirstAncestorOfClass("Model")
+    if not model then return false end
+
+    -- Проверяем все текстовые метки в этой модели (здании тюрьмы)
+    for _, item in pairs(model:GetDescendants()) do
+        if item:IsA("TextLabel") then
+            local txt = item.Text:upper()
+            -- Если включен игнор EASY и нашли текст EASY
+            if ignoreEasy and txt:find("EASY") then return true end
+            -- Если включен игнор NORMAL и нашли текст NORMAL
+            if ignoreNormal and txt:find("NORMAL") then return true end
+        end
+    end
+    return false
 end
 
 local function getTargets()
     local validTargets = {}
     local allPrompts = {}
     
-    -- 1. Собираем кнопки (как в оригинале)
+    -- 1. Сбор кнопок (оригинал) [cite: 3]
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("ProximityPrompt") then
             table.insert(allPrompts, obj)
         end
     end
 
-    -- 2. Ищем текст с нужной редкостью
+    -- 2. Поиск по редкости [cite: 4]
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("TextLabel") and obj.Text:lower():find(selectedRarity:lower()) then
             
-            -- Проверка на "платность" (из твоего оригинала)
+            -- === ПРОВЕРКА БЛЕКЛИСТА (НОВАЯ) ===
+            if isInsideBlacklistedZone(obj) then
+                continue -- Просто пропускаем эту цель
+            end
+
+            -- Анти-Робукс (оригинал) [cite: 5, 6]
             local isPaid = false
             local model = obj:FindFirstAncestorOfClass("Model")
             if model then
-                -- === НОВАЯ ПРОВЕРКА БЛЕКЛИСТА ЗОН ===
-                local inBlacklistedZone = false
-                for _, desc in pairs(model:GetDescendants()) do
-                    if desc:IsA("TextLabel") then
-                        local txt = desc.Text:upper()
-                        if (zoneSettings["EASY"] and txt:find("EASY")) or (zoneSettings["NORMAL"] and txt:find("NORMAL")) then
-                            inBlacklistedZone = true
-                            break
-                        end
-                    end
-                end
-                
-                if inBlacklistedZone then continue end -- Пропускаем эту цель, если она в EASY/NORMAL
-                -- =====================================
-
                 for _, t in pairs(model:GetDescendants()) do
                     if t:IsA("TextLabel") then
                         local txt = t.Text:lower()
@@ -77,12 +81,11 @@ local function getTargets()
             end
 
             if not isPaid then
-                local textPos = getSafePosition(obj) or (obj.Parent and getSafePosition(obj.Parent))
-                
+                local textPos = getSafePosition(obj)
                 if textPos then
+                    -- Поиск кнопки (оригинал) [cite: 8, 10]
                     local closestPrompt = nil
                     local minDist = 25
-                    
                     for _, prompt in pairs(allPrompts) do
                         local promptPos = getSafePosition(prompt.Parent)
                         if promptPos then
@@ -94,16 +97,15 @@ local function getTargets()
                         end
                     end
                     
+                    -- Проверка на свою базу [cite: 12, 14]
                     if closestPrompt then
-                        local isSafeZone = false
+                        local isSafe = true
                         if savedPosition then
-                            local distToBase = (textPos - savedPosition.Position).Magnitude
-                            if distToBase < 65 then
-                                isSafeZone = true
+                            if (textPos - savedPosition.Position).Magnitude < 65 then
+                                isSafe = false
                             end
                         end
-                        
-                        if not isSafeZone then
+                        if isSafe then
                             table.insert(validTargets, {p = closestPrompt, pos = getSafePosition(closestPrompt.Parent) or textPos})
                         end
                     end
@@ -114,7 +116,7 @@ local function getTargets()
     return validTargets
 end
 
--- КНОПКИ УПРАВЛЕНИЯ (из твоего оригинала)
+-- UI
 MainTab:CreateButton({
    Name = "1. SAVE BASE POSITION",
    Callback = function()
@@ -132,22 +134,21 @@ MainTab:CreateDropdown({
    Callback = function(Option) selectedRarity = Option[1] end,
 })
 
--- СЕКЦИЯ БЛЕКЛИСТА
 MainTab:CreateSection("Zone Blacklist")
 
 MainTab:CreateToggle({
    Name = "Ignore EASY Base",
-   CurrentValue = true,
-   Callback = function(Value) zoneSettings["EASY"] = Value end,
+   CurrentValue = false,
+   Callback = function(Value) ignoreEasy = Value end,
 })
 
 MainTab:CreateToggle({
    Name = "Ignore NORMAL Base",
-   CurrentValue = true,
-   Callback = function(Value) zoneSettings["NORMAL"] = Value end,
+   CurrentValue = false,
+   Callback = function(Value) ignoreNormal = Value end,
 })
 
--- АВТОФАРМ (полностью сохраненная логика оригинала)
+-- АВТОФАРМ (полный оригинал) 
 local function doSteal()
     local targets = getTargets()
     if #targets > 0 then
@@ -172,7 +173,7 @@ MainTab:CreateToggle({
         autoCollectEnabled = Value
         if Value then
             if not savedPosition then 
-                Rayfield:Notify({Title = "СТОП", Content = "Нажми SAVE BASE POSITION!", Duration = 3})
+                Rayfield:Notify({Title = "СТОП", Content = "Сначала сохрани базу!", Duration = 3})
                 return 
             end
             task.spawn(function()
@@ -182,13 +183,5 @@ MainTab:CreateToggle({
                 end
             end)
         end
-   end,
-})
-
-MainTab:CreateButton({
-   Name = "DEBUG (F9)",
-   Callback = function()
-        local targets = getTargets()
-        print("Найдено целей: " .. #targets)
    end,
 })
