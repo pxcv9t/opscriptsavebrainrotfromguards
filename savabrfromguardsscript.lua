@@ -1,8 +1,8 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "KAITO HUB | HOLD FIX",
-   LoadingTitle = "Установка защиты от доната...",
+   Name = "KAITO HUB | STEAL EDITION",
+   LoadingTitle = "Настройка фильтра Steal 😈...",
    LoadingSubtitle = "by Gemini",
    ConfigurationSaving = {Enabled = false},
    KeySystem = false
@@ -29,40 +29,30 @@ end
 local function getTargets()
     local validTargets = {}
     
-    -- 1. Собираем все кнопки на карте
+    -- 1. Сначала фильтруем ВСЕ кнопки на карте
     local allPrompts = {}
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("ProximityPrompt") then
-            -- 🔥 ГЛАВНЫЙ ФИЛЬТР: ЕСЛИ КНОПКА МОМЕНТАЛЬНАЯ (ДОНАТ) - ПРОПУСКАЕМ 🔥
-            -- Если кнопку нужно держать (HoldDuration > 0.1), значит это бесплатный моб для кражи!
-            if obj.HoldDuration > 0.1 then
-                
-                -- Твоя старая дополнительная страховка по тексту
-                local act = (obj.ActionText or ""):lower()
-                local objT = (obj.ObjectText or ""):lower()
-                if not (act:find("buy") or act:find("robux") or act:find("r%$") or 
-                        objT:find("buy") or objT:find("robux") or objT:find("r%$")) then
-                    table.insert(allPrompts, obj)
-                end
-                
+            local actionText = obj.ActionText:lower()
+            -- 🔥 КРИТЕРИИ КРАЖИ: Должно быть слово "Steal" и нужно ЗАЖИМАТЬ (Hold > 0)
+            if actionText:find("steal") and obj.HoldDuration > 0 then
+                table.insert(allPrompts, obj)
             end
         end
     end
 
-    -- 2. Ищем текст с нужной редкостью (твоя логика)
+    -- 2. Ищем текст нужной редкости
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("TextLabel") and obj.Text:lower():find(selectedRarity:lower()) then
             
-            -- Отсекаем платные клетки "GUARANTEED" на всякий случай
-            if obj.Text:lower():find("guaranteed") then continue end
-            
+            -- Дополнительная проверка модели на наличие ценников (на всякий случай)
             local isPaid = false
             local model = obj:FindFirstAncestorOfClass("Model")
             if model then
                 for _, t in pairs(model:GetDescendants()) do
                     if t:IsA("TextLabel") then
                         local txt = t.Text:lower()
-                        if txt:find("r%$") or txt:find("robux") or txt:find("buy") or txt:find("guaranteed") then
+                        if txt:find("r%$") or txt:find("robux") or txt:find("buy") or txt:find("price") then
                             isPaid = true break
                         end
                     end
@@ -70,12 +60,11 @@ local function getTargets()
             end
 
             if not isPaid then
-                local textPos = getSafePosition(obj) or (obj.Parent and getSafePosition(obj.Parent))
-                
+                local textPos = getSafePosition(obj)
                 if textPos then
-                    -- 3. Ищем ближайшую ПРОВЕРЕННУЮ кнопку
+                    -- 3. Ищем ближайшую кнопку из нашего отфильтрованного списка (только "Steal")
                     local closestPrompt = nil
-                    local minDist = 25
+                    local minDist = 30 -- Радиус связи текста и кнопки
                     
                     for _, prompt in pairs(allPrompts) do
                         local promptPos = getSafePosition(prompt.Parent)
@@ -88,12 +77,11 @@ local function getTargets()
                         end
                     end
                     
-                    -- 4. Если кнопка найдена, проверяем базу
+                    -- 4. Проверка на базу
                     if closestPrompt then
                         local isSafeZone = false
                         if savedPosition then
-                            local distToBase = (textPos - savedPosition.Position).Magnitude
-                            if distToBase < 65 then
+                            if (textPos - savedPosition.Position).Magnitude < 65 then
                                 isSafeZone = true 
                             end
                         end
@@ -114,7 +102,7 @@ MainTab:CreateButton({
    Callback = function()
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             savedPosition = player.Character.HumanoidRootPart.CFrame
-            Rayfield:Notify({Title = "OK", Content = "База сохранена! Радиус 65 метров защищен.", Duration = 3})
+            Rayfield:Notify({Title = "OK", Content = "База сохранена! Воруем только чужое.", Duration = 3})
         end
    end,
 })
@@ -126,14 +114,14 @@ MainTab:CreateDropdown({
    Callback = function(Option) selectedRarity = Option[1] end,
 })
 
--- Твоя логика автофарма (не тронута)
+-- Твоя логика автофарма
 local function doSteal()
     local targets = getTargets()
     if #targets > 0 then
         local target = targets[1]
         local hrp = player.Character.HumanoidRootPart
         
-        hrp.CFrame = CFrame.new(target.pos + Vector3.new(0, 2, 0))
+        hrp.CFrame = CFrame.new(target.pos + Vector3.new(0, 3, 0))
         task.wait(0.2)
         hrp.Anchored = true
         
@@ -154,7 +142,7 @@ MainTab:CreateToggle({
         autoCollectEnabled = Value
         if Value then
             if not savedPosition then 
-                Rayfield:Notify({Title = "СТОП", Content = "Нажми SAVE BASE POSITION!", Duration = 3})
+                Rayfield:Notify({Title = "СТОП", Content = "Сначала нажми SAVE BASE!", Duration = 3})
                 return 
             end
             task.spawn(function()
