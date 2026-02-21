@@ -1,8 +1,8 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "KAITO HUB | REANIMATOR",
-   LoadingTitle = "ПОЛНЫЙ СБРОС ФИЛЬТРОВ...",
+   Name = "KAITO HUB | FINAL FIX",
+   LoadingTitle = "Чистка системы...",
    ConfigurationSaving = {Enabled = false}
 })
 
@@ -12,7 +12,16 @@ local savedPosition = nil
 local selectedRarity = "God"
 local autoCollectEnabled = false
 
--- Простейшая функция координат
+-- Проверка: не принадлежит ли объект игроку?
+local function isAPlayer(obj)
+    for _, p in pairs(game.Players:GetPlayers()) do
+        if obj:IsDescendantOf(p.Character or workspace) and (p.Character and obj:IsDescendantOf(p.Character)) then
+            return true
+        end
+    end
+    return false
+end
+
 local function getPos(obj)
     if not obj then return nil end
     if obj:IsA("BasePart") then return obj.Position end
@@ -24,26 +33,35 @@ end
 local function getTargets()
     local targets = {}
     
-    -- Ищем все текстовые объекты на карте
     for _, obj in pairs(workspace:GetDescendants()) do
-        -- Упрощенный поиск: ищем слово в любом регистре
-        if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and string.find(obj.Text:lower(), selectedRarity:lower()) then
+        -- 1. Ищем текст God (только в мире, не у игроков)
+        if obj:IsA("TextLabel") and obj.Text:find(selectedRarity) and not isAPlayer(obj) then
             
-            -- ПРОВЕРКА НА РОБУКСЫ (Только если цена ПРЯМО ТУТ)
-            local isRobux = string.find(obj.Text:lower(), "r$") or string.find(obj.Text:lower(), "buy")
-            
-            if not isRobux then
-                -- Ищем ближайшую кнопку (ProximityPrompt) в модели этого текста
-                local model = obj:FindFirstAncestorOfClass("Model")
-                local prompt = model and model:FindFirstChildWhichIsA("ProximityPrompt", true)
+            local model = obj:FindFirstAncestorOfClass("Model")
+            if model then
+                -- 2. МГНОВЕННЫЙ АНТИ-РОБУКС
+                local isPaid = false
+                for _, child in pairs(model:GetDescendants()) do
+                    if child:IsA("TextLabel") then
+                        local t = child.Text:lower()
+                        if t:find("r%$") or t:find("robux") or t:find("buy") or t:find("price") then
+                            isPaid = true break
+                        end
+                    end
+                end
                 
-                if prompt then
-                    local pPos = getPos(prompt.Parent)
-                    -- Проверка: не воруем ли мы у себя на базе
-                    if savedPosition and pPos then
-                        local distToBase = (pPos - savedPosition.Position).Magnitude
-                        if distToBase > 45 then -- Если дальше 45 стадов от базы - это цель!
-                            table.insert(targets, {p = prompt, pos = pPos})
+                if not isPaid then
+                    local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+                    if prompt then
+                        -- Фильтр: платные кнопки обычно имеют HoldDuration = 0
+                        if prompt.HoldDuration > 0.1 then 
+                            local pPos = getPos(prompt.Parent)
+                            if pPos and savedPosition then
+                                -- Проверка на дистанцию (чтобы не прыгать на свою базу)
+                                if (pPos - savedPosition.Position).Magnitude > 50 then
+                                    table.insert(targets, {p = prompt, pos = pPos})
+                                end
+                            end
                         end
                     end
                 end
@@ -76,16 +94,13 @@ local function doSteal()
         local target = t[1]
         local hrp = player.Character.HumanoidRootPart
         
-        -- Полет
         hrp.CFrame = CFrame.new(target.pos + Vector3.new(0, 3, 0))
         task.wait(0.2)
         hrp.Anchored = true
         
-        -- Нажатие
         fireproximityprompt(target.p)
-        task.wait(target.p.HoldDuration + 0.2)
+        task.wait(target.p.HoldDuration + 0.3)
         
-        -- Домой
         hrp.Anchored = false
         hrp.CFrame = savedPosition
         return true
@@ -100,13 +115,13 @@ MainTab:CreateToggle({
         autoCollectEnabled = Value
         if Value then
             if not savedPosition then 
-                Rayfield:Notify({Title = "Error", Content = "Сначала нажми кнопку 1!", Duration = 3})
+                Rayfield:Notify({Title = "Error", Content = "Сначала нажми SAVE BASE!", Duration = 3})
                 return 
             end
             task.spawn(function()
                 while autoCollectEnabled do
-                    local success = doSteal()
-                    task.wait(success and 1 or 2)
+                    local ok = doSteal()
+                    task.wait(ok and 1.2 or 2.5)
                 end
             end)
         end
