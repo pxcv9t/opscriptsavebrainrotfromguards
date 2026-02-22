@@ -1,11 +1,10 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
 local Window = Rayfield:CreateWindow({
-   Name = "KAITO HUB | COORDINATE EDITION",
-   LoadingTitle = "Запуск по координатам...",
-   LoadingSubtitle = "Boundary System",
-   ConfigurationSaving = {Enabled = false},
-   KeySystem = false
+    Name = "KAITO HUB | RADAR EDITION (SAFE)",
+    LoadingTitle = "Запуск радара...",
+    LoadingSubtitle = "by Gemini (Anti-Robux Enhanced)",
+    ConfigurationSaving = {Enabled = false},
+    KeySystem = false
 })
 
 local MainTab = Window:CreateTab("MAIN", 4483362458)
@@ -14,11 +13,7 @@ local savedPosition = nil
 local selectedRarity = "God"
 local autoCollectEnabled = false
 
--- НАСТРОЙКА ГРАНИЦЫ
-local minX = 303.58 -- Твоя точка отсчета. Все, что меньше этого по X, игнорируется.
-local useCoordinateFilter = true
-
--- Функция безопасного получения координат (оригинал)
+-- Функция безопасного получения координат
 local function getSafePosition(obj)
     if not obj then return nil end
     if obj:IsA("BasePart") then return obj.Position end
@@ -30,22 +25,33 @@ local function getSafePosition(obj)
     return nil
 end
 
--- Проверка на "платность" (по тексту и значкам)
-local function isPaidTarget(obj)
-    local model = obj:FindFirstAncestorOfClass("Model")
+-- Функция проверки на платность (УЛУЧШЕННАЯ)
+local function isPaidItem(model, prompt)
+    local keywords = {"robux", "r%", "%$", "$", "buy", "purchase", "premium", "cost", "₽", "купить"}
+    
+    -- 1. Проверка текстов внутри модели
     if model then
         for _, t in pairs(model:GetDescendants()) do
-            if t:IsA("TextLabel") then
+            if t:IsA("TextLabel") or t:IsA("TextButton") then
                 local txt = t.Text:lower()
-                if txt:find("r%$") or txt:find("robux") or txt:find("buy") or txt:find("pay") then
-                    return true
+                for _, key in pairs(keywords) do
+                    if txt:find(key:lower()) then
+                        return true
+                    end
                 end
-            end
-            if t:IsA("ImageLabel") and (t.Image:find("robux") or t.Image:find("rbx")) then
-                return true
             end
         end
     end
+
+    -- 2. Проверка текста самой кнопки (ProximityPrompt)
+    if prompt then
+        local actionText = prompt.ActionText:lower()
+        local promptText = prompt PromptText:lower() -- Иногда цена в описании
+        for _, key in pairs(keywords) do            if actionText:find(key:lower()) then return true end
+            if promptText:find(key:lower()) then return true end
+        end
+    end
+
     return false
 end
 
@@ -53,53 +59,53 @@ local function getTargets()
     local validTargets = {}
     local allPrompts = {}
     
-    -- Собираем кнопки
+    -- 1. Собираем все кнопки на карте (один раз)
     for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("ProximityPrompt") then table.insert(allPrompts, obj) end
+        if obj:IsA("ProximityPrompt") then
+            table.insert(allPrompts, obj)
+        end
     end
 
-    -- Ищем по редкости
+    -- 2. Ищем текст с нужной редкостью
     for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("TextLabel") and obj.Text:lower():find(selectedRarity:lower()) then
             
-            local textPos = getSafePosition(obj)
-            if textPos then
-                -- === ФИЛЬТР КООРДИНАТ ===
-                -- Если X бреинрота меньше 303.58, мы его скипаем (это база сзади)
-                if useCoordinateFilter and textPos.X < minX then
-                    continue 
+            local model = obj:FindFirstAncestorOfClass("Model")
+            
+            -- НАЙТИ БЛИЖАЙШУЮ КНОПКУ СРАЗУ, ЧТОБЫ ПРОВЕРИТЬ ЕЁ НА ПЛАТНОСТЬ
+            local closestPrompt = nil
+            local minDist = 25
+            local textPos = getSafePosition(obj) or (obj.Parent and getSafePosition(obj.Parent))
+            
+            if not textPos then continue end
+
+            for _, prompt in pairs(allPrompts) do
+                local promptPos = getSafePosition(prompt.Parent)
+                if promptPos then
+                    local dist = (promptPos - textPos).Magnitude
+                    if dist < minDist then
+                        closestPrompt = prompt
+                        minDist = dist
+                    end
+                end
+            end
+
+            if closestPrompt then
+                -- ПРОВЕРКА АНТИ-РОБУКС (УСИЛЕННАЯ)
+                if isPaidItem(model, closestPrompt) then
+                    continue -- Пропускаем эту цель, она платная
                 end
 
-                -- ПРОВЕРКА НА РОБУКСЫ
-                if not isPaidTarget(obj) then
-                    
-                    -- Поиск кнопки рядом (оригинал)
-                    local closestPrompt = nil
-                    local minDist = 25
-                    for _, prompt in pairs(allPrompts) do
-                        local promptPos = getSafePosition(prompt.Parent)
-                        if promptPos then
-                            local dist = (promptPos - textPos).Magnitude
-                            if dist < minDist then
-                                closestPrompt = prompt
-                                minDist = dist
-                            end
-                        end
+                -- 3. Проверка зоны базы                local isSafeZone = false
+                if savedPosition then
+                    local distToBase = (textPos - savedPosition.Position).Magnitude
+                    if distToBase < 65 then
+                        isSafeZone = true
                     end
-                    
-                    -- Проверка на свою базу (оригинал)
-                    if closestPrompt then
-                        local isSafe = true
-                        if savedPosition then
-                            if (textPos - savedPosition.Position).Magnitude < 65 then
-                                isSafe = false
-                            end
-                        end
-                        
-                        if isSafe then
-                            table.insert(validTargets, {p = closestPrompt, pos = getSafePosition(closestPrompt.Parent) or textPos})
-                        end
-                    end
+                end
+
+                if not isSafeZone then
+                    table.insert(validTargets, {p = closestPrompt, pos = getSafePosition(closestPrompt.Parent) or textPos})
                 end
             end
         end
@@ -107,60 +113,59 @@ local function getTargets()
     return validTargets
 end
 
--- ИНТЕРФЕЙС
 MainTab:CreateButton({
-   Name = "1. SAVE BASE POSITION",
-   Callback = function()
+    Name = "1. SAVE BASE POSITION",
+    Callback = function()
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             savedPosition = player.Character.HumanoidRootPart.CFrame
-            Rayfield:Notify({Title = "OK", Content = "База сохранена!", Duration = 3})
+            Rayfield:Notify({Title = "OK", Content = "База сохранена! Радиус 65 метров защищен.", Duration = 3})
         end
-   end,
+    end,
 })
 
 MainTab:CreateDropdown({
-   Name = "2. SELECT RARITY",
-   Options = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "God", "Secret"},
-   CurrentOption = {"God"},
-   Callback = function(Option) selectedRarity = Option[1] end,
+    Name = "2. SELECT RARITY",
+    Options = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "God", "Secret"},
+    CurrentOption = {"God"},
+    Callback = function(Option) selectedRarity = Option[1] end,
 })
 
-MainTab:CreateSection("Filters")
-
-MainTab:CreateToggle({
-   Name = "Use Coordinate Gate (X > 303)",
-   CurrentValue = true,
-   Callback = function(Value) useCoordinateFilter = Value end,
-})
-
--- АВТОФАРМ
 local function doSteal()
     local targets = getTargets()
     if #targets > 0 then
         local target = targets[1]
         local hrp = player.Character.HumanoidRootPart
         
+        -- Телепорт к кнопке
         hrp.CFrame = CFrame.new(target.pos + Vector3.new(0, 2, 0))
         task.wait(0.2)
+        
+        -- Фиксация позиции
         hrp.Anchored = true
+        
+        -- Взлом
         fireproximityprompt(target.p)
-        task.wait(target.p.HoldDuration + 0.3)
+        task.wait(target.p.HoldDuration + 0.3)        
+        -- Возврат
         hrp.Anchored = false
-        hrp.CFrame = savedPosition
+        if savedPosition then
+            hrp.CFrame = savedPosition
+        end
         return true
     end
     return false
 end
 
 MainTab:CreateToggle({
-   Name = "3. START AUTO FARM",
-   CurrentValue = false,
-   Callback = function(Value)
+    Name = "3. START AUTO FARM",
+    CurrentValue = false,
+    Callback = function(Value)
         autoCollectEnabled = Value
         if Value then
-            if not savedPosition then 
-                Rayfield:Notify({Title = "СТОП", Content = "Сначала сохрани базу!", Duration = 3})
-                return 
+            if not savedPosition then
+                Rayfield:Notify({Title = "СТОП", Content = "Нажми SAVE BASE POSITION!", Duration = 3})
+                autoCollectEnabled = false
+                return
             end
             task.spawn(function()
                 while autoCollectEnabled do
@@ -169,5 +174,24 @@ MainTab:CreateToggle({
                 end
             end)
         end
-   end,
+    end,
+})
+
+MainTab:CreateButton({
+    Name = "DEBUG: ПРОВЕРКА ФИЛЬТРОВ (F9)",
+    Callback = function()
+        print("--- СКАНИРОВАНИЕ КАРТЫ ---")
+        if not savedPosition then print("ОШИБКА: База не сохранена!") return end
+        local targets = getTargets()
+        print("Найдено бесплатных целей (" .. selectedRarity .. "): " .. #targets)
+        if #targets == 0 then
+            print("Возможные причины:")
+            print("1. Нет диких объектов с редкостью " .. selectedRarity)
+            print("2. Все объекты помечены как ПЛАТНЫЕ (сработал Анти-Робукс)")
+            print("3. Объекты слишком близко к базе")
+        else
+            print("Цели есть! Автофарм работает безопасно.")
+        end
+        print("--------------------------")
+    end,
 })
